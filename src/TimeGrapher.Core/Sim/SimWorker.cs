@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.Sim;
@@ -18,7 +17,7 @@ public enum SimCompletionReason
 /// shared <see cref="MasterAudioBuffer"/> with real-time pacing and 2-second throughput
 /// statistics, exactly like the original Qt worker.
 /// </summary>
-public sealed class SimWorker : IDisposable
+public sealed class SimWorker : IAudioInputWorker
 {
     // Windows timing constants (Q_OS_WIN branch of SimWorker.cpp).
     private const int SimSamplePeriodMsec = 10;
@@ -39,12 +38,15 @@ public sealed class SimWorker : IDisposable
 
     private Thread? _thread;
     private volatile bool _interruptionRequested; // QThread::isInterruptionRequested()
+    private readonly WorkerPauseGate _pauseGate = new();
 
     /// <summary>Notify-only: new audio is available. Raised from the sim thread.</summary>
     public event Action? DataReady; // SimDataReady
 
     /// <summary>Raised once when the sim loop finishes/stops. Raised from the sim thread.</summary>
     public event Action<SimCompletionReason>? SimDone;   // SimDone
+
+    public bool IsPaused => _pauseGate.IsPaused;
 
     public SimWorker(MasterAudioBuffer buffer, int samplesPerSecond)
     {
@@ -68,6 +70,7 @@ public sealed class SimWorker : IDisposable
         }
 
         _interruptionRequested = false;
+        _pauseGate.SetPaused(false);
         var cfgCopy = cfg.Clone(); // original receives cfg by value
         _thread = new Thread(() => StartSim(cfgCopy))
         {
@@ -87,6 +90,7 @@ public sealed class SimWorker : IDisposable
     public bool TryStop(TimeSpan timeout)
     {
         _interruptionRequested = true;
+        _pauseGate.SetPaused(false);
         Thread? t = _thread;
         if (t != null && t.IsAlive)
         {
@@ -100,11 +104,15 @@ public sealed class SimWorker : IDisposable
         return true;
     }
 
+    public void SetPaused(bool paused)
+    {
+        _pauseGate.SetPaused(paused);
+    }
+
     public void Dispose()
     {
         Stop();
-        // TSimWorker destructor: "delete [] mDataIn; qInfo() << SimWorker Destructor"
-        Console.Error.WriteLine("SimWorker Destructor");
+        _pauseGate.Dispose();
     }
 
     private void StartSim(WatchSynthStreamConfig cfg)
@@ -137,6 +145,12 @@ public sealed class SimWorker : IDisposable
 
         while (true)
         {
+            if (!_pauseGate.WaitWhilePaused(() => _interruptionRequested))
+            {
+                reason = SimCompletionReason.Cancelled;
+                break;
+            }
+
             start = _timer.ElapsedMilliseconds;
 
             r = stream.FillF32(_dataIn.AsSpan(0, _dataInSize), events.AsSpan(0, 16));
@@ -184,7 +198,6 @@ public sealed class SimWorker : IDisposable
         }
 
         SimDone?.Invoke(reason);
-        Console.Error.WriteLine("After Finish");
     }
 
     private static bool JoinInfinite(Thread thread)

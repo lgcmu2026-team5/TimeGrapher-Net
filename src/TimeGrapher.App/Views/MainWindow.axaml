@@ -6,7 +6,7 @@
         MinWidth="900" MinHeight="560">
   <DockPanel>
     <Border DockPanel.Dock="Bottom" Height="24" Background="#F0F0F0" BorderBrush="#C0C0C0" BorderThickness="0,1,0,0">
-      <TextBlock Name="StatusBarText" VerticalAlignment="Center" Margin="6,0,0,0" Text="" />
+      <TextBlock Name="StatusBarText" VerticalAlignment="Center" Margin="6,0,0,0" Text="{Binding StatusText}" />
     </Border>
 
     <Grid ColumnDefinitions="300,*" RowDefinitions="30,*">
@@ -24,35 +24,58 @@
                 <TextBlock Name="GainLabel" Grid.Row="0" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Gain" />
                 <Slider Name="MicrophoneHorizontalSlider" Grid.Row="0" Grid.Column="1"
-                        Minimum="0" Maximum="1000" Value="100" Orientation="Horizontal" />
+                        Minimum="0" Maximum="1000" Value="{Binding Gain, Mode=TwoWay}" Orientation="Horizontal" />
 
                 <ComboBox Name="InputDeviceComboBox" Grid.Row="1" Grid.ColumnSpan="2"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          ItemsSource="{Binding InputDeviceNames}"
+                          SelectedIndex="{Binding SelectedInputDeviceIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <Button Name="RefreshPushButton" Grid.Row="2" Grid.Column="0"
-                        MinWidth="72" FontWeight="Bold" Content="Refresh" />
+                        MinWidth="72" FontWeight="Bold" Content="Refresh"
+                        Command="{Binding RefreshDevicesCommand}"
+                        IsEnabled="{Binding AreRunParametersEnabled}" />
 
                 <TextBlock Name="SampleRateLabel" Grid.Row="3" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Sample Rate" />
                 <ComboBox Name="SampleRatesComboBox" Grid.Row="3" Grid.Column="1"
+                          IsEnabled="{Binding IsSampleRateEnabled}"
+                          ItemsSource="{Binding SampleRateLabels}"
+                          SelectedIndex="{Binding SelectedSampleRateIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="ModeLabel" Grid.Row="4" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Mode" />
                 <ComboBox Name="ModeComboBox" Grid.Row="4" Grid.Column="1"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          ItemsSource="{Binding ModeNames}"
+                          SelectedIndex="{Binding SelectedModeIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="AveragingPeriodLabel" Grid.Row="5" Grid.Column="0"
                            VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Text="Averaging Period" />
                 <ComboBox Name="AveragingPeriodComboBox" Grid.Row="5" Grid.Column="1"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          ItemsSource="{Binding AveragingPeriodLabels}"
+                          SelectedIndex="{Binding SelectedAveragingPeriodIndex, Mode=TwoWay}"
                           FontSize="13" FontWeight="Bold" />
               </Grid>
 
-              <Grid ColumnDefinitions="Auto,*,Auto">
+              <Grid ColumnDefinitions="Auto,*,Auto,*,Auto">
                 <Button Name="StartPushButton" Grid.Column="0"
-                        MinWidth="72" FontWeight="Bold" Content="Start" />
-                <Button Name="StopPushButton" Grid.Column="2"
-                        MinWidth="72" FontWeight="Bold" Content="Stop" />
+                        MinWidth="72" FontWeight="Bold" Content="Start"
+                        Command="{Binding StartCommand}"
+                        IsEnabled="{Binding IsStartEnabled}" />
+                <Button Name="PausePushButton" Grid.Column="2"
+                        MinWidth="72" FontWeight="Bold"
+                        Content="{Binding PauseButtonText}"
+                        Command="{Binding PauseCommand}"
+                        IsEnabled="{Binding IsPauseEnabled}" />
+                <Button Name="StopPushButton" Grid.Column="4"
+                        MinWidth="72" FontWeight="Bold" Content="Stop"
+                        Command="{Binding StopCommand}"
+                        IsEnabled="{Binding IsStopEnabled}" />
               </Grid>
             </StackPanel>
           </Border>
@@ -66,13 +89,18 @@
                 <TextBlock Name="WatchBphLabel" Grid.Row="0" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="BPH" />
                 <ComboBox Name="BPHComboBox" Grid.Row="0" Grid.Column="1"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          ItemsSource="{Binding BphLabels}"
+                          SelectedIndex="{Binding SelectedBphIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="LiftAngleLabel" Grid.Row="1" Grid.Column="0"
                            VerticalAlignment="Center" FontSize="12" FontWeight="Bold" Text="Lift Angle" />
                 <NumericUpDown Name="LiftAngleSpinBox" Grid.Row="1" Grid.Column="1"
+                               IsEnabled="{Binding AreRunParametersEnabled}"
+                               Value="{Binding LiftAngle, Mode=TwoWay}"
                                FontSize="13" FontWeight="Bold" FormatString="0'°'"
-                               Minimum="30" Maximum="70" Increment="1" Value="30" />
+                               Minimum="30" Maximum="70" Increment="1" />
               </Grid>
             </StackPanel>
           </Border>
@@ -86,28 +114,38 @@
                 <TextBlock Name="SimBphLabel" Grid.Row="0" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="BPH" />
                 <ComboBox Name="SimBPHComboBox" Grid.Row="0" Grid.Column="1"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          ItemsSource="{Binding SimBphLabels}"
+                          SelectedIndex="{Binding SelectedSimBphIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="SimErrorRateLabel" Grid.Row="1" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Error Rate" />
                 <NumericUpDown Name="SimErrorRateSpinBox" Grid.Row="1" Grid.Column="1"
+                               IsEnabled="{Binding AreRunParametersEnabled}"
+                               Value="{Binding SimErrorRate, Mode=TwoWay}"
                                FontSize="13" FontWeight="Bold" FormatString="0' s/d'"
-                               Minimum="-999" Maximum="999" Increment="1" Value="0" />
+                               Minimum="-999" Maximum="999" Increment="1" />
 
                 <TextBlock Name="SimAmpLabel" Grid.Row="2" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Amplitude" />
                 <NumericUpDown Name="SimAmplitudeSpinBox" Grid.Row="2" Grid.Column="1"
+                               IsEnabled="{Binding AreRunParametersEnabled}"
+                               Value="{Binding SimAmplitude, Mode=TwoWay}"
                                FontSize="13" FontWeight="Bold" FormatString="0'°'"
-                               Minimum="100" Maximum="360" Increment="1" Value="300" />
+                               Minimum="100" Maximum="360" Increment="1" />
 
                 <TextBlock Name="SimBeatErrorLabel" Grid.Row="3" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Beat Error" />
                 <NumericUpDown Name="SimBeatErrorSpinBox" Grid.Row="3" Grid.Column="1"
+                               IsEnabled="{Binding AreRunParametersEnabled}"
+                               Value="{Binding SimBeatError, Mode=TwoWay}"
                                FontWeight="Bold" FormatString="0.0' ms'"
-                               Minimum="-10" Maximum="10" Increment="0.1" Value="0" />
+                               Minimum="-10" Maximum="10" Increment="0.1" />
 
                 <CheckBox Name="RealisticCheckBox" Grid.Row="4" Grid.ColumnSpan="2"
-                          FontWeight="Bold" Content="Realistic" IsChecked="True" />
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          FontWeight="Bold" Content="Realistic" IsChecked="{Binding Realistic, Mode=TwoWay}" />
               </Grid>
             </StackPanel>
           </Border>
@@ -121,15 +159,19 @@
                 <TextBlock Name="HighPassLabel" Grid.Row="0" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="High Pass Cutoff" />
                 <TextBox Name="HighLineEdit" Grid.Row="0" Grid.Column="1"
-                         Text="200" />
+                         IsEnabled="{Binding AreRunParametersEnabled}"
+                         Text="{Binding HighPassCutoffText, Mode=TwoWay}" />
 
                 <TextBlock Name="ScopeScaleLabel" Grid.Row="1" Grid.Column="0"
                            VerticalAlignment="Center" FontWeight="Bold" Text="Scope Scale" />
                 <NumericUpDown Name="ScopeScaleSpinBox" Grid.Row="1" Grid.Column="1"
-                               Minimum="1" Maximum="8" Increment="1" Value="2" />
+                               Minimum="1" Maximum="8" Increment="1"
+                               Value="{Binding ScopeScale, Mode=TwoWay}" />
 
                 <CheckBox Name="UseConsetCheckBox" Grid.Row="2" Grid.ColumnSpan="2"
-                          FontWeight="Bold" Content="C Event Use Onset Amplitude" />
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          FontWeight="Bold" Content="C Event Use Onset Amplitude"
+                          IsChecked="{Binding UseCOnset, Mode=TwoWay}" />
               </Grid>
             </StackPanel>
           </Border>

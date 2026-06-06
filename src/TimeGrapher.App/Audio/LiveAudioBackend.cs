@@ -5,7 +5,9 @@ namespace TimeGrapher.App.Audio;
 
 internal static class LiveAudioBackend
 {
-    private static readonly int[] StandardSampleRates = { 48000, 96000, 192000, 384000 };
+    private const string WindowsSoundEndpointName = "USB PnP Sound Device";
+    private const string WindowsSoundMicName = "USB PnP Sound Device";
+    private const int WindowsSoundMicPercentVolume = 50;
 
     public static bool CanCapture =>
         OperatingSystem.IsWindows() ||
@@ -27,7 +29,7 @@ internal static class LiveAudioBackend
 
         if (OperatingSystem.IsLinux())
         {
-            return PipeWireAudioCaptureWorker.EnumerateInputDevices();
+            return LinuxLiveAudioWorker.EnumerateInputDevices();
         }
 
         return Array.Empty<LiveAudioDevice>();
@@ -40,7 +42,7 @@ internal static class LiveAudioBackend
             return AudioCaptureWorker.GetCandidateSampleRates(deviceNumber);
         }
 
-        return StandardSampleRates;
+        return AudioSampleRates.Standard;
     }
 
     public static ILiveAudioWorker CreateWorker(MasterAudioBuffer buffer)
@@ -52,9 +54,22 @@ internal static class LiveAudioBackend
 
         if (OperatingSystem.IsLinux())
         {
-            return new PipeWireAudioCaptureWorker(buffer);
+            return new LinuxLiveAudioWorker(buffer);
         }
 
         throw new PlatformNotSupportedException("Live audio capture is not supported on this platform.");
+    }
+
+    public static void ConfigurePreferredInput()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        SystemAudioControl.SetSoundParameters(
+            WindowsSoundEndpointName,
+            WindowsSoundMicName,
+            WindowsSoundMicPercentVolume);
     }
 }

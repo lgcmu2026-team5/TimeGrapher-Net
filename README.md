@@ -52,7 +52,8 @@ audio backend(Windows는 NAudio WaveInEvent, Linux/Pi는 PipeWire `pw-record` + 
 QThread/signal→전용 Thread + AutoResetEvent + `Dispatcher.UIThread.Post`. WPF 미사용.
 
 Core는 WindowsAudio/NAudio/PipeWire를 참조하지 않는다. live audio backend는 App의 작은
-`ILiveAudioWorker` 계약 뒤에서 선택된다.
+`ILiveAudioWorker` 계약 뒤에서 선택되고, 실행 중인 Live/Playback/Sim 입력 worker는
+공통 `IAudioInputWorker` lifecycle로 pause/stop/data-ready를 처리한다.
 
 패키지 버전은 `Directory.Packages.props`에서 중앙 관리하고 `packages.lock.json`을 커밋한다.
 CI는 `dotnet restore --locked-mode`, Release build, test, generated/edge WAV verifier,

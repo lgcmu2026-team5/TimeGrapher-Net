@@ -3,7 +3,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Rendering;
 
-public sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer
+internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer
 {
     private readonly SoundPrintRenderer _renderer;
     private PixelBuffer? _latestSoundImage;

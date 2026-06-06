@@ -6,7 +6,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Rendering;
 
-public sealed class RateScopeRenderer
+internal sealed class RateScopeRenderer
 {
     private readonly AvaPlot _scopePlot;
     private readonly AvaPlot _ratePlot;

@@ -28,6 +28,13 @@ internal sealed class WindowsLiveAudioWorker : ILiveAudioWorker
         _inner.SetVolume(volume);
     }
 
+    public bool IsPaused => _inner.IsPaused;
+
+    public void SetPaused(bool paused)
+    {
+        _inner.SetPaused(paused);
+    }
+
     public bool TryStop(TimeSpan timeout)
     {
         return _inner.TryStop(timeout);

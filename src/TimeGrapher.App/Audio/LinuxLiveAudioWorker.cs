@@ -7,8 +7,10 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Audio;
 
-internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
+internal sealed class LinuxLiveAudioWorker : ILiveAudioWorker
 {
+    private const int ReplacementStopTimeoutMs = 2000;
+    private const int StartupFailureProbeTimeoutMs = 250;
     private const int Channels = MasterAudioBuffer.Channels;
     private const int AlsaDeviceNumberBase = 1_000_000;
     private const int AlsaDeviceNumberStride = 1_000;
@@ -34,14 +36,17 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
     private float _volume = 1.0f;
     private PcmSampleFormat _sampleFormat = PcmSampleFormat.Float32LittleEndian;
     private string _processErrorPrefix = "pw-record";
+    private volatile bool _paused;
 
-    public PipeWireAudioCaptureWorker(MasterAudioBuffer buffer)
+    public LinuxLiveAudioWorker(MasterAudioBuffer buffer)
     {
         _rawAudio = buffer;
         _rawAudio.Reset();
     }
 
     public event Action? DataReady;
+
+    public bool IsPaused => _paused;
 
     public static IReadOnlyList<LiveAudioDevice> EnumerateInputDevices()
     {
@@ -144,10 +149,13 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
     public void Start(int deviceNumber, int sampleRate, float volume)
     {
         _volume = volume;
+        _paused = false;
         if (_process != null)
         {
-            _process.Dispose();
-            _process = null;
+            if (!TryStop(TimeSpan.FromMilliseconds(ReplacementStopTimeoutMs)))
+            {
+                throw new InvalidOperationException("Existing audio capture process did not stop.");
+            }
         }
 
         if (TryDecodeAlsaDeviceNumber(deviceNumber, out int card, out int device))
@@ -235,10 +243,13 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
         _stdoutThread.Start();
         _stderrThread.Start();
 
-        Thread.Sleep(250);
-        if (process.HasExited)
+        if (process.WaitForExit(StartupFailureProbeTimeoutMs))
         {
             string error = _stderr.ToString().Trim();
+            _stdoutThread?.Join(TimeSpan.FromMilliseconds(250));
+            _stderrThread?.Join(TimeSpan.FromMilliseconds(250));
+            _stdoutThread = null;
+            _stderrThread = null;
             process.Dispose();
             _process = null;
             throw new InvalidOperationException(
@@ -251,8 +262,14 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
         _volume = volume;
     }
 
+    public void SetPaused(bool paused)
+    {
+        _paused = paused;
+    }
+
     public bool TryStop(TimeSpan timeout)
     {
+        _paused = false;
         Process? process = Interlocked.Exchange(ref _process, null);
         if (process == null)
         {
@@ -277,6 +294,8 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
 
             _stdoutThread?.Join(TimeSpan.FromMilliseconds(250));
             _stderrThread?.Join(TimeSpan.FromMilliseconds(250));
+            _stdoutThread = null;
+            _stderrThread = null;
             return true;
         }
         finally
@@ -292,7 +311,8 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
 
     private void ReadPcm(Process process)
     {
-        var pending = Array.Empty<byte>();
+        var pending = new byte[sizeof(float)];
+        int pendingCount = 0;
         var readBuffer = new byte[8192];
 
         try
@@ -307,29 +327,37 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
                     return;
                 }
 
-                int combinedLength = pending.Length + read;
-                var combined = new byte[combinedLength];
-                if (pending.Length > 0)
+                int offset = 0;
+                if (pendingCount > 0)
                 {
-                    Array.Copy(pending, combined, pending.Length);
-                }
-                Array.Copy(readBuffer, 0, combined, pending.Length, read);
+                    int bytesNeeded = bytesPerSample - pendingCount;
+                    int bytesToCopy = Math.Min(bytesNeeded, read);
+                    Array.Copy(readBuffer, 0, pending, pendingCount, bytesToCopy);
+                    pendingCount += bytesToCopy;
+                    offset += bytesToCopy;
 
-                int usableBytes = combinedLength - (combinedLength % bytesPerSample);
-                int leftoverBytes = combinedLength - usableBytes;
+                    if (pendingCount < bytesPerSample)
+                    {
+                        continue;
+                    }
+
+                    WriteSamples(pending.AsSpan(0, bytesPerSample), _sampleFormat);
+                    pendingCount = 0;
+                }
+
+                int remaining = read - offset;
+                int usableBytes = remaining - (remaining % bytesPerSample);
                 if (usableBytes > 0)
                 {
-                    WriteSamples(combined.AsSpan(0, usableBytes), _sampleFormat);
+                    WriteSamples(readBuffer.AsSpan(offset, usableBytes), _sampleFormat);
+                    offset += usableBytes;
                 }
 
+                int leftoverBytes = read - offset;
                 if (leftoverBytes > 0)
                 {
-                    pending = new byte[leftoverBytes];
-                    Array.Copy(combined, usableBytes, pending, 0, leftoverBytes);
-                }
-                else
-                {
-                    pending = Array.Empty<byte>();
+                    Array.Copy(readBuffer, offset, pending, 0, leftoverBytes);
+                    pendingCount = leftoverBytes;
                 }
             }
         }
@@ -371,6 +399,11 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
 
     private void WriteSamples(ReadOnlySpan<byte> bytes, PcmSampleFormat sampleFormat)
     {
+        if (_paused)
+        {
+            return;
+        }
+
         int bytesPerSample = BytesPerSample(sampleFormat);
         int sampleCount = bytes.Length / bytesPerSample;
         if (sampleCount <= 0)
@@ -380,7 +413,9 @@ internal sealed class PipeWireAudioCaptureWorker : ILiveAudioWorker
         }
 
         float volume = _volume;
-        float[] block = new float[sampleCount];
+        Span<float> block = sampleCount <= 4096
+            ? stackalloc float[sampleCount]
+            : new float[sampleCount];
         for (int i = 0; i < sampleCount; i++)
         {
             int offset = i * bytesPerSample;

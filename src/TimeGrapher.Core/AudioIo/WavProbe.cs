@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.AudioIo;
 
@@ -42,7 +43,7 @@ public sealed record WavAcceptanceProfile(
         new(
             RequireIeeeFloat32: true,
             RequireMono: true,
-            AcceptedSampleRates: new HashSet<int> { 48000, 96000, 192000, 384000 });
+            AcceptedSampleRates: AudioSampleRates.StandardSet);
 }
 
 public static class WavProbe

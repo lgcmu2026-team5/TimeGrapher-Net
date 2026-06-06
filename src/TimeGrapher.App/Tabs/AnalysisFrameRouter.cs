@@ -2,7 +2,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Tabs;
 
-public sealed class AnalysisFrameRouter
+internal sealed class AnalysisFrameRouter
 {
     private readonly Dictionary<string, IAnalysisFrameConsumer> _consumers;
 

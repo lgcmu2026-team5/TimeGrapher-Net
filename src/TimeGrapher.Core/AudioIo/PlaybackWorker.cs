@@ -20,7 +20,7 @@ public enum PlaybackCompletionReason
 /// and <see cref="DoneReadingFile"/> once when the file finishes, is cancelled, or fails.
 /// Runs on a dedicated thread; <see cref="Stop"/> requests interruption and joins.
 /// </summary>
-public sealed class PlaybackWorker : IDisposable
+public sealed class PlaybackWorker : IAudioInputWorker
 {
     // Windows pacing constants (PlaybackWorker.cpp, Q_OS_WIN branch).
     private const int PlaybackSamplePeriodMsec = 10;
@@ -46,12 +46,15 @@ public sealed class PlaybackWorker : IDisposable
 
     private Thread? _thread;
     private volatile bool _interruptionRequested;
+    private readonly WorkerPauseGate _pauseGate = new();
 
     /// <summary>Raised on the playback thread after each block is written.</summary>
     public event Action? DataReady;
 
     /// <summary>Raised on the playback thread once when playback finishes.</summary>
     public event Action<PlaybackCompletionReason>? DoneReadingFile;
+
+    public bool IsPaused => _pauseGate.IsPaused;
 
     public PlaybackWorker(MasterAudioBuffer buffer, int samplesPerSecond)
     {
@@ -78,6 +81,7 @@ public sealed class PlaybackWorker : IDisposable
         }
 
         _interruptionRequested = false;
+        _pauseGate.SetPaused(false);
         _thread = new Thread(() => Run(fileName))
         {
             IsBackground = true,
@@ -96,6 +100,7 @@ public sealed class PlaybackWorker : IDisposable
     public bool TryStop(TimeSpan timeout)
     {
         _interruptionRequested = true;
+        _pauseGate.SetPaused(false);
         var t = _thread;
         if (t != null && t.IsAlive)
         {
@@ -109,9 +114,15 @@ public sealed class PlaybackWorker : IDisposable
         return true;
     }
 
+    public void SetPaused(bool paused)
+    {
+        _pauseGate.SetPaused(paused);
+    }
+
     public void Dispose()
     {
         Stop();
+        _pauseGate.Dispose();
     }
 
     // ── Playback loop (PlaybackWorker.cpp::StartPlayback) ──────────────────────
@@ -159,6 +170,12 @@ public sealed class PlaybackWorker : IDisposable
 
             while ((file.Position < dataEnd) && (numSamples > 0))
             {
+                if (!_pauseGate.WaitWhilePaused(() => _interruptionRequested))
+                {
+                    reason = PlaybackCompletionReason.Cancelled;
+                    break;
+                }
+
                 long start = _timer.ElapsedMilliseconds;
 
                 int bytesToRead = (int)Math.Min(_dataInSize, dataEnd - file.Position);

@@ -18,7 +18,7 @@ namespace TimeGrapher.App.Rendering;
 /// the in-memory byte order of each uint is B, G, R, A, which is exactly PixelFormat.Bgra8888.
 /// So the uint[] can be blitted directly into a Bgra8888 framebuffer.
 /// </summary>
-public static class PixelBufferBitmap
+internal static class PixelBufferBitmap
 {
     private sealed class ImageCache
     {

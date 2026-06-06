@@ -3,7 +3,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Rendering;
 
-public sealed class SoundPrintRenderer
+internal sealed class SoundPrintRenderer
 {
     private readonly Image _soundImage;
 

@@ -2,19 +2,19 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Tabs;
 
-public enum InfoTabKind
+internal enum InfoTabKind
 {
     RateScope,
     SoundPrint,
 }
 
-public enum GraphSeriesRenderMode
+internal enum GraphSeriesRenderMode
 {
     Line,
     Points,
 }
 
-public sealed record GraphSeriesDefinition(
+internal sealed record GraphSeriesDefinition(
     string Id,
     string Name,
     uint Color,
@@ -22,7 +22,7 @@ public sealed record GraphSeriesDefinition(
     int TargetPointBudget,
     int FillAlpha = 0);
 
-public sealed record InfoTabDefinition(
+internal sealed record InfoTabDefinition(
     string Id,
     string Title,
     InfoTabKind Kind,
@@ -30,7 +30,7 @@ public sealed record InfoTabDefinition(
     bool UsesGraphSnapshots,
     IReadOnlyList<GraphSeriesDefinition> GraphSeries);
 
-public static class InfoTabCatalog
+internal static class InfoTabCatalog
 {
     public const string RateScopeTabId = "rate-scope";
     public const string SoundPrintTabId = "sound-print";

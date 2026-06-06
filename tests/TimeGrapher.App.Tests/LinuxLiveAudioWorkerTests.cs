@@ -3,7 +3,7 @@ using Xunit;
 
 namespace TimeGrapher.App.Tests;
 
-public sealed class PipeWireAudioCaptureWorkerTests
+public sealed class LinuxLiveAudioWorkerTests
 {
     [Fact]
     public void ParseWpctlSources_ReturnsSourceNodesOnly()
@@ -21,7 +21,7 @@ Audio
  Streams:
 """;
 
-        IReadOnlyList<LiveAudioDevice> devices = PipeWireAudioCaptureWorker.ParseWpctlSources(status);
+        IReadOnlyList<LiveAudioDevice> devices = LinuxLiveAudioWorker.ParseWpctlSources(status);
 
         Assert.Collection(
             devices,
@@ -51,7 +51,7 @@ Audio
  Streams:
 """;
 
-        IReadOnlyList<LiveAudioDevice> devices = PipeWireAudioCaptureWorker.ParseWpctlSources(status);
+        IReadOnlyList<LiveAudioDevice> devices = LinuxLiveAudioWorker.ParseWpctlSources(status);
 
         Assert.Empty(devices);
     }
@@ -69,20 +69,20 @@ card 4: CA7 [Cubilux CA7], device 0: USB Audio [USB Audio]
   Subdevice #0: subdevice #0
 """;
 
-        IReadOnlyList<LiveAudioDevice> devices = PipeWireAudioCaptureWorker.ParseAlsaCaptureDevices(arecordList);
+        IReadOnlyList<LiveAudioDevice> devices = LinuxLiveAudioWorker.ParseAlsaCaptureDevices(arecordList);
 
         Assert.Collection(
             devices,
             first =>
             {
-                Assert.True(PipeWireAudioCaptureWorker.TryDecodeAlsaDeviceNumber(first.Number, out int card, out int device));
+                Assert.True(LinuxLiveAudioWorker.TryDecodeAlsaDeviceNumber(first.Number, out int card, out int device));
                 Assert.Equal(3, card);
                 Assert.Equal(0, device);
                 Assert.Equal("ALSA hw:3,0 USB PnP Sound Device - USB Audio", first.Name);
             },
             second =>
             {
-                Assert.True(PipeWireAudioCaptureWorker.TryDecodeAlsaDeviceNumber(second.Number, out int card, out int device));
+                Assert.True(LinuxLiveAudioWorker.TryDecodeAlsaDeviceNumber(second.Number, out int card, out int device));
                 Assert.Equal(4, card);
                 Assert.Equal(0, device);
                 Assert.Equal("ALSA hw:4,0 Cubilux CA7 - USB Audio", second.Name);
@@ -96,7 +96,7 @@ card 4: CA7 [Cubilux CA7], device 0: USB Audio [USB Audio]
 **** List of CAPTURE Hardware Devices ****
 """;
 
-        IReadOnlyList<LiveAudioDevice> devices = PipeWireAudioCaptureWorker.ParseAlsaCaptureDevices(arecordList);
+        IReadOnlyList<LiveAudioDevice> devices = LinuxLiveAudioWorker.ParseAlsaCaptureDevices(arecordList);
 
         Assert.Empty(devices);
     }

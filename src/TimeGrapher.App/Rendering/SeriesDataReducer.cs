@@ -2,7 +2,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Rendering;
 
-public static class SeriesDataReducer
+internal static class SeriesDataReducer
 {
     public static bool TryReplaceSeriesData(
         GraphSeriesFrame? series,

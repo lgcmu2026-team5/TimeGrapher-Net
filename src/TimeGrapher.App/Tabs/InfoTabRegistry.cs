@@ -5,12 +5,12 @@ using TimeGrapher.App.Rendering;
 
 namespace TimeGrapher.App.Tabs;
 
-public sealed record InfoTabRegistration(
+internal sealed record InfoTabRegistration(
     InfoTabDefinition Definition,
     TabItem TabItem,
     IAnalysisFrameConsumer Consumer);
 
-public sealed class InfoTabRegistry
+internal sealed class InfoTabRegistry
 {
     private delegate InfoTabRegistration InfoTabFactory(
         InfoTabDefinition definition,

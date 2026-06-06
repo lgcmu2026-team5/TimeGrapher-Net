@@ -6,21 +6,20 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Avalonia.Controls;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
 using TimeGrapher.App;
 using TimeGrapher.App.Audio;
 using TimeGrapher.App.Rendering;
+using TimeGrapher.App.Services;
 using TimeGrapher.App.Tabs;
+using TimeGrapher.App.ViewModels;
 using TimeGrapher.Core.Analysis;
 using TimeGrapher.Core.AudioIo;
+using TimeGrapher.Core.Detection;
 using TimeGrapher.Core.Shared;
 using TimeGrapher.Core.Sim;
-using TimeGrapher.Platform.WindowsAudio;
 
 namespace TimeGrapher.App.Views;
 
@@ -33,11 +32,9 @@ public partial class MainWindow : Window
 
     private const int ERROR_RATE_Y_SCALE = 10;
     private const int ERROR_RATE_X_DATA_POINTS = 250;
-    private const int UI_RENDER_INTERVAL_MS = InfoTabCatalog.DefaultUiRefreshIntervalMs;
     private const int DEFAULT_SOUND_IMAGE_WIDTH = 1019;
     private const int DEFAULT_SOUND_IMAGE_HEIGHT = 654;
     private const int WORKER_STOP_TIMEOUT_MS = 2000;
-
     private const string PLAYBACK_OR_SIM_PCM = "Playback/Sim";
 
     private const string PREF_NAME_WELSHI = "Welshi USB";
@@ -47,16 +44,10 @@ public partial class MainWindow : Window
     {
         Stopped,
         Stopping,
-        Failed,
     }
 
     private static StopOutcome CombineStopOutcome(StopOutcome left, StopOutcome right)
     {
-        if (left == StopOutcome.Failed || right == StopOutcome.Failed)
-        {
-            return StopOutcome.Failed;
-        }
-
         if (left == StopOutcome.Stopping || right == StopOutcome.Stopping)
         {
             return StopOutcome.Stopping;
@@ -64,11 +55,6 @@ public partial class MainWindow : Window
 
         return StopOutcome.Stopped;
     }
-
-    // ConfigureSoundCard constants (Windows path).
-    private const string WINDOWS_SOUND_ENDPOINT_NAME = "USB PnP Sound Device";
-    private const string WINDOWS_SOUND_MIC_NAME = "USB PnP Sound Device";
-    private const int WINDOWS_SOUND_MIC_PERCENT_VOLUME = 50;
 
     // RenameAudioDevices[][2]: { match-substring, preferred-display-name }.
     private static readonly string[][] RenameAudioDevices =
@@ -94,43 +80,21 @@ public partial class MainWindow : Window
         "Sim",
     };
 
-    private static readonly int[] ManualAutoBPH =
-    {
-        0, // Auto
-        3600,  6000,  7200,  7380,  7440,  7800,  9000,  9100, 10800, 11880,
-        12000, 12342, 12480, 12600, 13320, 13440, 13500, 14000, 14040, 14160,
-        14200, 14280, 14400, 14520, 14580, 14760, 14850, 15000, 15360, 15600,
-        16200, 16320, 16800, 17196, 11258, 17280, 17186, 17897, 18000, 18049,
-        18514, 19332, 19440, 19800, 20160, 20222, 20944, 21000, 21031, 21306,
-        21600, 25200, 28800, 32400, 36000, 43200,
-    };
-
-    private static readonly int[] SimBPH =
-    {
-        3600,  6000,  7200,  7380,  7440,  7800,  9000,  9100, 10800, 11880,
-        12000, 12342, 12480, 12600, 13320, 13440, 13500, 14000, 14040, 14160,
-        14200, 14280, 14400, 14520, 14580, 14760, 14850, 15000, 15360, 15600,
-        16200, 16320, 16800, 17196, 11258, 17280, 17186, 17897, 18000, 18049,
-        18514, 19332, 19440, 19800, 20160, 20222, 20944, 21000, 21031, 21306,
-        21600, 25200, 28800, 32400, 36000, 43200,
-    };
-
     private static readonly int[] AveragingPeriodList = { 2, 4, 8, 10, 12, 20, 20, 30, 40, 50, 60, 120, 240 };
 
     // --- Members (mirror MainWindow.h) ---
-    private QueuedWavStreamWriter? mWavWriter;
+    private IRecordingWriter? mWavWriter;
+    private readonly ITimeGrapherDialogService mDialogs;
+    private readonly RecordingSessionService mRecordingSessionService;
+    private readonly PlaybackFileService mPlaybackFileService;
     private GraphFrameRenderer mGraphFrameRenderer = null!;
     private AnalysisFrameRouter mFrameRouter = null!;
     private InfoTabRegistry mInfoTabRegistry = null!;
     private MasterAudioBuffer? mRawAudio;
     private AnalysisWorker? mAnalysisWorker;
-    private ILiveAudioWorker? mAudioWorker;
-    private PlaybackWorker? mPlaybackWorker;
-    private SimWorker? mSimWorker;
+    private IAudioInputWorker? mInputWorker;
     private readonly int[] mAvalableRates = new int[5];
     private int mNumberofRates;
-    private double mLiftAngle;
-    private int mAveragingPeriod;
     private string mCurrentDir;
     private int mCurrentSamplesPerSecond;
     private int mRateBeforePlaybackOrSim;
@@ -150,24 +114,40 @@ public partial class MainWindow : Window
     private bool mAnalysisFrameRenderScheduled;
     private ulong mRenderGeneration;
     private ulong mDroppedAnalysisFrames;
-    private Action<PlaybackCompletionReason>? mPlaybackDoneHandler;
-    private Action<SimCompletionReason>? mSimDoneHandler;
-    private Action? mAudioDataReadyHandler;
-    private Action? mPlaybackDataReadyHandler;
-    private Action? mSimDataReadyHandler;
-    private bool mStartInProgress;
+    private Action? mInputDataReadyHandler;
+    private Action? mInputCompletionDetach;
     private bool mIsClosing;
+    private readonly MainWindowViewModel mViewModel;
+    private readonly MainWindowSelectionCoordinator mSelectionCoordinator;
+    private readonly RunSelectionResolver mRunSelectionResolver;
+    private readonly RunCommandService mRunCommandService;
 
     // Parallel to InputDeviceComboBox items: device number for live devices, -1 for "Playback/Sim".
     private readonly List<int> mInputDeviceNumbers = new();
 
-    // True while populating combos so programmatic changes don't run user-change logic
-    // (Qt connects on_* slots only after setupUi; mirror that by suppressing during init/loads).
-    private bool mSuppressEvents;
-
     public MainWindow()
     {
         InitializeComponent();
+        mViewModel = new MainWindowViewModel(StartRunAsync, TogglePauseRun, StopRun, LoadAudioDevices);
+        mSelectionCoordinator = new MainWindowSelectionCoordinator(
+            mViewModel,
+            new MainWindowSelectionOperations(this),
+            new MainWindowSelectionOptions(
+                ModeStrings[LIVE],
+                ModeStrings[PLAYBACK],
+                PLAYBACK_OR_SIM_PCM,
+                PreferredAudioDevices,
+                AveragingPeriodList));
+        mRunSelectionResolver = new RunSelectionResolver(
+            mViewModel,
+            AveragingPeriodList,
+            BphCatalog.ManualAutoBph,
+            BphCatalog.ManualBph);
+        mDialogs = new MainWindowDialogService(this);
+        mRecordingSessionService = new RecordingSessionService(mDialogs, new QueuedRecordingWriterFactory());
+        mPlaybackFileService = new PlaybackFileService(mDialogs);
+        mRunCommandService = new RunCommandService(mViewModel, new RunCommandOperations(this));
+        DataContext = mViewModel;
 
         // Default working directory: current dir, then ../../samples if it exists (MainWindow ctor).
         mCurrentDir = Directory.GetCurrentDirectory();
@@ -179,34 +159,19 @@ public partial class MainWindow : Window
         catch { /* keep current dir */ }
 
         mCurrentSamplesPerSecond = 48000;
-        mLiftAngle = 52;
-
         mBackgroundLastFPS = 0.0;
         mBackgroundLastSPF = 0.0;
         mBackgroundLastSPS = 0.0;
 
         Title = "TimeGrapher";
 
-        StopPushButton.IsEnabled = false;
-
         // Results->setAlignment(Qt::AlignHCenter); set in XAML.
-        // LiftAngleSpinBox->setValue(mLiftAngle);
-        LiftAngleSpinBox.Value = (decimal)mLiftAngle;
-
         mInfoTabRegistry = InfoTabRegistry.FromCatalog(GraphicsTabWidget, FontFamily.Name);
         mGraphFrameRenderer = new GraphFrameRenderer(mInfoTabRegistry.Consumers, Results);
         mFrameRouter = mInfoTabRegistry.CreateRouter();
 
         // Wire events (Qt auto-connected on_* slots + explicit connect()s).
-        RefreshPushButton.Click += OnRefreshPushButtonClicked;
-        StartPushButton.Click += OnStartPushButtonClicked;
-        StopPushButton.Click += OnStopPushButtonClicked;
-        MicrophoneHorizontalSlider.PropertyChanged += OnMicrophoneSliderPropertyChanged;
-        LiftAngleSpinBox.PropertyChanged += OnLiftAngleSpinBoxPropertyChanged;
-        AveragingPeriodComboBox.SelectionChanged += OnAveragingPeriodComboBoxChanged;
-        ModeComboBox.SelectionChanged += OnModeComboBoxChanged;
-        InputDeviceComboBox.SelectionChanged += OnInputDeviceComboBoxChanged;
-        SampleRatesComboBox.SelectionChanged += OnSampleRatesComboBoxChanged;
+        mViewModel.PropertyChanged += mSelectionCoordinator.OnViewModelPropertyChanged;
         GraphicsTabWidget.SelectionChanged += OnGraphicsTabSelectionChanged;
 
         LoadBPH();
@@ -215,6 +180,7 @@ public partial class MainWindow : Window
         mGraphFrameRenderer.Initialize(BuildTabResetContext());
         LoadAverageingPeriod();
         Results.Text = "RATE ------ s/d   AMPLITUDE ---   BEAT ERROR ---- ms   BEAT ----- bph";
+        SetGuiStopMode();
 
         Closed += OnWindowClosed;
     }
@@ -223,10 +189,9 @@ public partial class MainWindow : Window
     {
         // ~MainWindow: StopAnalysisThread(); plus stop any running input worker.
         mIsClosing = true;
+        mViewModel.PropertyChanged -= mSelectionCoordinator.OnViewModelPropertyChanged;
         InvalidateRunSession();
-        StopAudioWorker();
-        StopPlaybackWorkerImmediate();
-        StopSimWorkerImmediate();
+        StopInputWorker("Input");
         StopAnalysisThread();
         AudioCloseCheck();
     }
@@ -251,19 +216,11 @@ public partial class MainWindow : Window
 
     private void ConfigureSoundCard()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        // Windows endpoint volume helper. Linux/Pi capture uses the live audio backend.
-        SystemAudioControl.SetSoundParameters(WINDOWS_SOUND_ENDPOINT_NAME, WINDOWS_SOUND_MIC_NAME, WINDOWS_SOUND_MIC_PERCENT_VOLUME);
+        LiveAudioBackend.ConfigurePreferredInput();
     }
 
     private void LoadAudioDevices()
     {
-        mSuppressEvents = true;
-
         IReadOnlyList<LiveAudioDevice> inputDevices = Array.Empty<LiveAudioDevice>();
         if (LiveAudioBackend.CanCapture)
         {
@@ -281,7 +238,7 @@ public partial class MainWindow : Window
             Console.Error.WriteLine("Live audio capture is not available on this platform; using Playback/Sim only.");
         }
 
-        InputDeviceComboBox.Items.Clear();
+        var deviceNames = new List<string>();
         mInputDeviceNumbers.Clear();
 
         int renameLen = RenameAudioDevices.Length;
@@ -297,20 +254,25 @@ public partial class MainWindow : Window
                     break;
                 }
             }
-            InputDeviceComboBox.Items.Add(description);
+            deviceNames.Add(description);
             mInputDeviceNumbers.Add(device.Number);
-            Console.Error.WriteLine("Device Name - " + description);
         }
 
-        InputDeviceComboBox.Items.Add(PLAYBACK_OR_SIM_PCM);
+        deviceNames.Add(PLAYBACK_OR_SIM_PCM);
         mInputDeviceNumbers.Add(-1);
-        Console.Error.WriteLine("Device Name - " + PLAYBACK_OR_SIM_PCM);
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetInputDeviceNames(deviceNames);
+        }
 
         int len = PreferredAudioDevices.Length;
         int selected = -1;
         for (int i = 0; i < len; i++)
         {
-            int index = FindText(InputDeviceComboBox, PreferredAudioDevices[i], matchContains: true);
+            int index = MainWindowSelectionCoordinator.FindText(
+                mViewModel.InputDeviceNames,
+                PreferredAudioDevices[i],
+                matchContains: true);
             if (index != -1) // -1 means the text was not found
             {
                 selected = index;
@@ -318,22 +280,20 @@ public partial class MainWindow : Window
             }
         }
 
-        mSuppressEvents = false;
-
         // setCurrentIndex(index) triggers on_InputDeviceComboBox_currentIndexChanged once.
         // (Avalonia ComboBox does not auto-select on add, unlike Qt; explicitly select to
         //  reach the same final state where PopulateSampleRates has run for the chosen device.)
         if (selected != -1)
         {
-            InputDeviceComboBox.SelectedIndex = selected;
+            mSelectionCoordinator.SetSelectedInputDeviceIndex(selected, forceChanged: true);
         }
-        else if (InputDeviceComboBox.ItemCount > 0)
+        else if (mViewModel.InputDeviceNames.Count > 0)
         {
             // No preferred device matched: fall back to index 0 (Qt's auto-selected first item).
-            if (InputDeviceComboBox.SelectedIndex == 0)
-                OnInputDeviceComboBoxChanged(InputDeviceComboBox, null!); // re-run logic; index unchanged
+            if (mViewModel.SelectedInputDeviceIndex == 0)
+                mSelectionCoordinator.SetSelectedInputDeviceIndex(0, forceChanged: true); // re-run logic; index unchanged
             else
-                InputDeviceComboBox.SelectedIndex = 0;
+                mSelectionCoordinator.SetSelectedInputDeviceIndex(0);
         }
 
         LoadMode();
@@ -341,44 +301,61 @@ public partial class MainWindow : Window
 
     private void LoadAverageingPeriod()
     {
-        mSuppressEvents = true;
         int length = AveragingPeriodList.Length;
+        var labels = new List<string>(length);
         for (int i = 0; i < length; i++)
         {
             string name = AveragingPeriodList[i].ToString(CultureInfo.InvariantCulture) + "s";
-            AveragingPeriodComboBox.Items.Add(name);
+            labels.Add(name);
         }
-        mSuppressEvents = false;
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetAveragingPeriodLabels(labels);
+            mViewModel.SelectedAveragingPeriodIndex = -1;
+        }
 
-        AveragingPeriodComboBox.SelectedIndex = 4; // 20 Seconds (also sets mAveragingPeriod via handler)
+        int defaultIndex = mRunSelectionResolver.DefaultAveragingPeriodIndex;
+        mViewModel.SelectedAveragingPeriodIndex = defaultIndex == -1 ? 0 : defaultIndex;
     }
 
     private void LoadBPH()
     {
-        mSuppressEvents = true;
-        int length = ManualAutoBPH.Length;
+        IReadOnlyList<int> manualAutoBph = BphCatalog.ManualAutoBph;
+        int length = manualAutoBph.Count;
+        var labels = new List<string>(length);
         for (int i = 0; i < length; i++)
         {
-            string name = ManualAutoBPH[i] != 0
-                ? ManualAutoBPH[i].ToString(CultureInfo.InvariantCulture)
+            int bph = manualAutoBph[i];
+            string name = bph != 0
+                ? bph.ToString(CultureInfo.InvariantCulture)
                 : "Auto BPH";
-            BPHComboBox.Items.Add(name);
+            labels.Add(name);
         }
-        mSuppressEvents = false;
-        BPHComboBox.SelectedIndex = 0; // Auto
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetBphLabels(labels);
+            mViewModel.SelectedBphIndex = -1;
+        }
+        mViewModel.SelectedBphIndex = 0; // Auto
     }
 
     private void LoadSimBPH()
     {
-        mSuppressEvents = true;
-        int length = SimBPH.Length;
+        IReadOnlyList<int> simBph = BphCatalog.ManualBph;
+        int length = simBph.Count;
+        var labels = new List<string>(length);
         for (int i = 0; i < length; i++)
         {
-            string name = SimBPH[i].ToString(CultureInfo.InvariantCulture);
-            SimBPHComboBox.Items.Add(name);
+            string name = simBph[i].ToString(CultureInfo.InvariantCulture);
+            labels.Add(name);
         }
-        mSuppressEvents = false;
-        SimBPHComboBox.SelectedIndex = 52;
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetSimBphLabels(labels);
+            mViewModel.SelectedSimBphIndex = -1;
+        }
+        int defaultIndex = mRunSelectionResolver.DefaultSimulationBphIndex;
+        mViewModel.SelectedSimBphIndex = defaultIndex == -1 ? 0 : defaultIndex;
     }
 
     private void LoadMode()
@@ -386,19 +363,22 @@ public partial class MainWindow : Window
         int start = 0;
         int len = ModeStrings.Length;
 
-        mSuppressEvents = true;
-        ModeComboBox.Items.Clear();
+        var labels = new List<string>(len);
 
-        if (InputDeviceComboBox.ItemCount == 1) // Skip over Live (only "Playback/Sim" present)
+        if (mViewModel.InputDeviceNames.Count == 1) // Skip over Live (only "Playback/Sim" present)
         {
             start++;
         }
         for (int i = start; i < len; i++)
         {
-            ModeComboBox.Items.Add(ModeStrings[i]);
+            labels.Add(ModeStrings[i]);
         }
-        mSuppressEvents = false;
-        ModeComboBox.SelectedIndex = 0;
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetModeNames(labels);
+            mViewModel.SelectedModeIndex = -1;
+        }
+        mSelectionCoordinator.SetSelectedModeIndex(0);
     }
 
     // --- Worker lifecycle ---
@@ -419,37 +399,38 @@ public partial class MainWindow : Window
         mRawAudio = new MasterAudioBuffer(mCurrentSamplesPerSecond);
         StartAnalysisThread();
 
-        mAudioWorker = LiveAudioBackend.CreateWorker(mRawAudio);
-        // AudioDataReady -> analysis worker (DataReady is notify-only).
-        mAudioDataReadyHandler = CreateDataReadyHandler(runSessionToken);
-        mAudioWorker.DataReady += mAudioDataReadyHandler;
-        mAudioWorker.Start(deviceNumber, mCurrentSamplesPerSecond, (float)(MicrophoneHorizontalSlider.Value / 1000.0));
+        ILiveAudioWorker audioWorker = LiveAudioBackend.CreateWorker(mRawAudio);
+        AttachInputWorker(audioWorker, runSessionToken);
+        audioWorker.Start(deviceNumber, mCurrentSamplesPerSecond, (float)(mViewModel.Gain / 1000.0));
     }
 
     private StopOutcome StopAudioThread()
     {
         // LocalStopAudio -> StopAudioRecording.
-        return StopAudioWorker();
+        return StopInputWorker("Audio");
     }
 
-    private StopOutcome StopAudioWorker()
+    private StopOutcome StopInputWorker(string workerName)
     {
-        if (mAudioWorker != null)
+        IAudioInputWorker? worker = mInputWorker;
+        if (worker != null)
         {
-            if (mAudioDataReadyHandler != null)
+            if (mInputDataReadyHandler != null)
             {
-                mAudioWorker.DataReady -= mAudioDataReadyHandler;
-                mAudioDataReadyHandler = null;
+                worker.DataReady -= mInputDataReadyHandler;
+                mInputDataReadyHandler = null;
             }
 
-            if (!mAudioWorker.TryStop(TimeSpan.FromMilliseconds(WORKER_STOP_TIMEOUT_MS)))
+            if (!worker.TryStop(TimeSpan.FromMilliseconds(WORKER_STOP_TIMEOUT_MS)))
             {
-                StatusBarText.Text = "Audio worker did not stop within timeout";
+                mViewModel.StatusText = workerName + " worker did not stop within timeout";
                 return StopOutcome.Stopping;
             }
 
-            mAudioWorker.Dispose();
-            mAudioWorker = null;
+            mInputCompletionDetach?.Invoke();
+            mInputCompletionDetach = null;
+            worker.Dispose();
+            mInputWorker = null;
         }
 
         return StopOutcome.Stopped;
@@ -464,12 +445,11 @@ public partial class MainWindow : Window
         mRawAudio = new MasterAudioBuffer(mCurrentSamplesPerSecond);
         StartAnalysisThread();
 
-        mPlaybackWorker = new PlaybackWorker(mRawAudio, mCurrentSamplesPerSecond);
-        mPlaybackDataReadyHandler = CreateDataReadyHandler(runSessionToken);
-        mPlaybackWorker.DataReady += mPlaybackDataReadyHandler;
-        mPlaybackDoneHandler = reason => OnPlaybackDoneReadingFile(runSessionToken, reason);
-        mPlaybackWorker.DoneReadingFile += mPlaybackDoneHandler;
-        if (!mPlaybackWorker.Start(fileName))
+        var playbackWorker = new PlaybackWorker(mRawAudio, mCurrentSamplesPerSecond);
+        Action<PlaybackCompletionReason> doneHandler = reason => OnPlaybackDoneReadingFile(runSessionToken, reason);
+        playbackWorker.DoneReadingFile += doneHandler;
+        AttachInputWorker(playbackWorker, runSessionToken, () => playbackWorker.DoneReadingFile -= doneHandler);
+        if (!playbackWorker.Start(fileName))
         {
             throw new InvalidOperationException("Playback worker is already running.");
         }
@@ -484,12 +464,11 @@ public partial class MainWindow : Window
         mRawAudio = new MasterAudioBuffer(mCurrentSamplesPerSecond);
         StartAnalysisThread();
 
-        mSimWorker = new SimWorker(mRawAudio, mCurrentSamplesPerSecond);
-        mSimDataReadyHandler = CreateDataReadyHandler(runSessionToken);
-        mSimWorker.DataReady += mSimDataReadyHandler;
-        mSimDoneHandler = reason => OnSimDone(runSessionToken, reason);
-        mSimWorker.SimDone += mSimDoneHandler;
-        if (!mSimWorker.Start(cfg))
+        var simWorker = new SimWorker(mRawAudio, mCurrentSamplesPerSecond);
+        Action<SimCompletionReason> doneHandler = reason => OnSimDone(runSessionToken, reason);
+        simWorker.SimDone += doneHandler;
+        AttachInputWorker(simWorker, runSessionToken, () => simWorker.SimDone -= doneHandler);
+        if (!simWorker.Start(cfg))
         {
             throw new InvalidOperationException("Sim worker is already running.");
         }
@@ -499,70 +478,12 @@ public partial class MainWindow : Window
     {
         // requestInterruption(): cancel; the worker reports completion via DoneReadingFile,
         // but on_StopPushButton_clicked also calls StopAnalysisThread()/AudioCloseCheck() directly.
-        return StopPlaybackWorkerImmediate();
+        return StopInputWorker("Playback");
     }
 
     private StopOutcome StopSimThread()
     {
-        return StopSimWorkerImmediate();
-    }
-
-    private StopOutcome StopPlaybackWorkerImmediate()
-    {
-        if (mPlaybackWorker != null)
-        {
-            if (mPlaybackDataReadyHandler != null)
-            {
-                mPlaybackWorker.DataReady -= mPlaybackDataReadyHandler;
-                mPlaybackDataReadyHandler = null;
-            }
-            if (mPlaybackWorker.TryStop(TimeSpan.FromMilliseconds(WORKER_STOP_TIMEOUT_MS)))
-            {
-                if (mPlaybackDoneHandler != null)
-                {
-                    mPlaybackWorker.DoneReadingFile -= mPlaybackDoneHandler;
-                    mPlaybackDoneHandler = null;
-                }
-                mPlaybackWorker.Dispose();
-                mPlaybackWorker = null;
-            }
-            else
-            {
-                StatusBarText.Text = "Playback worker did not stop within timeout";
-                return StopOutcome.Stopping;
-            }
-        }
-
-        return StopOutcome.Stopped;
-    }
-
-    private StopOutcome StopSimWorkerImmediate()
-    {
-        if (mSimWorker != null)
-        {
-            if (mSimDataReadyHandler != null)
-            {
-                mSimWorker.DataReady -= mSimDataReadyHandler;
-                mSimDataReadyHandler = null;
-            }
-            if (mSimWorker.TryStop(TimeSpan.FromMilliseconds(WORKER_STOP_TIMEOUT_MS)))
-            {
-                if (mSimDoneHandler != null)
-                {
-                    mSimWorker.SimDone -= mSimDoneHandler;
-                    mSimDoneHandler = null;
-                }
-                mSimWorker.Dispose();
-                mSimWorker = null;
-            }
-            else
-            {
-                StatusBarText.Text = "Sim worker did not stop within timeout";
-                return StopOutcome.Stopping;
-            }
-        }
-
-        return StopOutcome.Stopped;
+        return StopInputWorker("Sim");
     }
 
     private void StartAnalysisThread()
@@ -600,7 +521,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                StatusBarText.Text = "Analysis worker did not stop within timeout";
+                mViewModel.StatusText = "Analysis worker did not stop within timeout";
                 return StopOutcome.Stopping;
             }
         }
@@ -623,6 +544,17 @@ public partial class MainWindow : Window
         };
     }
 
+    private void AttachInputWorker(
+        IAudioInputWorker worker,
+        ulong runSessionToken,
+        Action? detachCompletion = null)
+    {
+        mInputWorker = worker;
+        mInputCompletionDetach = detachCompletion;
+        mInputDataReadyHandler = CreateDataReadyHandler(runSessionToken);
+        worker.DataReady += mInputDataReadyHandler;
+    }
+
     private void OnPlaybackDoneReadingFile(ulong runSessionToken, PlaybackCompletionReason reason)
     {
         // PlaybackDoneReadingFile fires on the playback thread; marshal to UI thread.
@@ -636,30 +568,30 @@ public partial class MainWindow : Window
 
     private void HandlePlaybackDoneReadingFile(ulong runSessionToken, PlaybackCompletionReason reason)
     {
-        if (runSessionToken != mRunSessionToken)
-        {
-            return;
-        }
-        InvalidateRunSession();
-        SetGuiStoppingMode();
-        if (ModeComboBox.SelectedIndex == PLAYBACK)
-        {
-            SetAudioDevice(mDeviceNameBeforePlaybackOrSim);
-            SetAudioRate(mRateBeforePlaybackOrSim);
-        }
-        StopOutcome outcome = StopPlaybackWorkerImmediate();
-        outcome = CombineStopOutcome(outcome, StopAnalysisThread(completeInput: true));
-        bool audioClosed = outcome == StopOutcome.Stopped && AudioCloseCheck();
-        if (outcome != StopOutcome.Stopped || !audioClosed)
-        {
-            SetGuiStoppingMode();
-            return;
-        }
-        SetGuiStopMode();
-        StatusBarText.Text = reason == PlaybackCompletionReason.Failed ? "Playback failed" : "Stopped";
+        CompletePlaybackOrSimulationRun(
+            runSessionToken,
+            shouldRestoreAudioState: CurrentModeText() == ModeStrings[PLAYBACK],
+            stopInputWorker: () => StopInputWorker("Playback"),
+            failureStatus: "Playback failed",
+            failed: reason == PlaybackCompletionReason.Failed);
     }
 
     private void HandleSimDone(ulong runSessionToken, SimCompletionReason reason)
+    {
+        CompletePlaybackOrSimulationRun(
+            runSessionToken,
+            shouldRestoreAudioState: CurrentModeText() == ModeStrings[SIM],
+            stopInputWorker: () => StopInputWorker("Sim"),
+            failureStatus: "Simulation failed",
+            failed: reason == SimCompletionReason.Failed);
+    }
+
+    private void CompletePlaybackOrSimulationRun(
+        ulong runSessionToken,
+        bool shouldRestoreAudioState,
+        Func<StopOutcome> stopInputWorker,
+        string failureStatus,
+        bool failed)
     {
         if (runSessionToken != mRunSessionToken)
         {
@@ -667,12 +599,11 @@ public partial class MainWindow : Window
         }
         InvalidateRunSession();
         SetGuiStoppingMode();
-        if (ModeComboBox.SelectedIndex == SIM)
+        if (shouldRestoreAudioState)
         {
-            SetAudioDevice(mDeviceNameBeforePlaybackOrSim);
-            SetAudioRate(mRateBeforePlaybackOrSim);
+            RestorePlaybackOrSimulationAudioState();
         }
-        StopOutcome outcome = StopSimWorkerImmediate();
+        StopOutcome outcome = stopInputWorker();
         outcome = CombineStopOutcome(outcome, StopAnalysisThread(completeInput: true));
         bool audioClosed = outcome == StopOutcome.Stopped && AudioCloseCheck();
         if (outcome != StopOutcome.Stopped || !audioClosed)
@@ -681,7 +612,7 @@ public partial class MainWindow : Window
             return;
         }
         SetGuiStopMode();
-        StatusBarText.Text = reason == SimCompletionReason.Failed ? "Simulation failed" : "Stopped";
+        mViewModel.StatusText = failed ? failureStatus : "Stopped";
     }
 
     // AnalysisFrameReady fires on the analysis thread; marshal to UI thread.
@@ -802,7 +733,7 @@ public partial class MainWindow : Window
         }
         if (statusUpdated)
         {
-            StatusBarText.Text = string.Format(
+            mViewModel.StatusText = string.Format(
                 CultureInfo.InvariantCulture,
                 "Backgroud Audio Thread Average - FPS:{0}, SPS:{1}, SPF: {2} Foregroud Audio Handler Average - FPS:{3}, SPS:{4}, SPF: {5}",
                 mBackgroundLastFPS.ToString("F0", CultureInfo.InvariantCulture),
@@ -814,14 +745,14 @@ public partial class MainWindow : Window
         }
         if (frame.InputOverrun)
         {
-            StatusBarText.Text = "Audio input overrun: dropped " +
-                                 frame.InputSamplesDropped.ToString(CultureInfo.InvariantCulture) +
-                                 " samples before analysis";
+            mViewModel.StatusText = "Audio input overrun: dropped " +
+                                    frame.InputSamplesDropped.ToString(CultureInfo.InvariantCulture) +
+                                    " samples before analysis";
         }
         else if (frame.AnalysisLagSamples > (ulong)Math.Max(1, mCurrentSamplesPerSecond / 4))
         {
             double lagMs = frame.AnalysisLagSamples * 1000.0 / Math.Max(1, mCurrentSamplesPerSecond);
-            StatusBarText.Text = string.Format(
+            mViewModel.StatusText = string.Format(
                 CultureInfo.InvariantCulture,
                 "Analysis lag: {0:F0} ms ({1} samples), processing {2:F1} ms",
                 lagMs,
@@ -838,8 +769,6 @@ public partial class MainWindow : Window
 
     private void Reset()
     {
-        Console.Error.WriteLine("RESET");
-
         mGraphFrameRenderer.Reset(BuildTabResetContext());
 
         mBackgroundLastFPS = 0.0;
@@ -852,39 +781,13 @@ public partial class MainWindow : Window
 
     private async Task<bool> RecordSessionCheck()
     {
-        // QMessageBox Yes/No/Cancel (default No). Implemented as a modal dialog.
-        var ret = await ShowRecordSessionDialog();
-
-        if (ret == DialogResult.Yes)
+        RecordingSessionStartResult result = await mRecordingSessionService.TryStartAsync(mCurrentSamplesPerSecond);
+        if (result.Writer != null)
         {
-            string? fileName = await ShowSaveWavDialog();
-            if (!string.IsNullOrEmpty(fileName))
-            {
-                mWavWriter = new QueuedWavStreamWriter();
-                if (!mWavWriter.Open(fileName, mCurrentSamplesPerSecond, 1))
-                {
-                    await ShowCriticalDialog("Error", "Failed to open WAV file");
-                    mWavWriter.Dispose();
-                    mWavWriter = null;
-                    return false;
-                }
-            }
-            else
-            {
-                return false;
-            }
-            return true;
-        }
-        else if (ret == DialogResult.No)
-        {
-            return true;
-        }
-        else if (ret == DialogResult.Cancel)
-        {
-            return false;
+            mWavWriter = result.Writer;
         }
 
-        return true;
+        return result.ShouldContinue;
     }
 
     private bool AudioCloseCheck()
@@ -895,7 +798,7 @@ public partial class MainWindow : Window
             bool closed = mWavWriter.Close();
             if (!closed)
             {
-                StatusBarText.Text = "Failed to close WAV recording cleanly";
+                mViewModel.StatusText = "Failed to close WAV recording cleanly";
                 return false;
             }
 
@@ -903,7 +806,7 @@ public partial class MainWindow : Window
             mWavWriter = null;
             if (droppedBlocks != 0)
             {
-                StatusBarText.Text = "WAV recording dropped " +
+                mViewModel.StatusText = "WAV recording dropped " +
                                      droppedBlocks.ToString(CultureInfo.InvariantCulture) +
                                      " block(s)";
             }
@@ -912,64 +815,19 @@ public partial class MainWindow : Window
         return true;
     }
 
-    // OpenFile: validate WAV header (standard-rate/mono/32-bit float). Returns true if acceptable.
-    private async Task<bool> OpenFile(string fileName)
-    {
-        if (!File.Exists(fileName))
-        {
-            StatusBarText.Text = $"File {ToNativeSeparators(fileName)} could not be opened";
-            return false;
-        }
-
-        if (!WavProbe.TryReadFormat(fileName, out WavFormatInfo format, out _))
-        {
-            StatusBarText.Text = $"File {ToNativeSeparators(fileName)} could not be opened";
-            return false;
-        }
-
-        if (!WavProbe.IsAccepted(format, WavAcceptanceProfile.PlaybackFloatMonoStandardRates))
-        {
-            StatusBarText.Text = $"File {fileName} Not a standard-rate, single channel 32-bit Float WAV file";
-            await ShowCriticalDialog("Error", "Invalid PCM Wave File");
-            return false;
-        }
-
-        try
-        {
-            mCurrentDir = Path.GetDirectoryName(Path.GetFullPath(fileName)) ?? mCurrentDir;
-        }
-        catch { /* keep current dir */ }
-
-        GetAudioRate(out mRateBeforePlaybackOrSim);
-        GetAudioDevice(out mDeviceNameBeforePlaybackOrSim);
-        if (!SetAudioDevice(PLAYBACK_OR_SIM_PCM))
-        {
-            Console.Error.WriteLine("SetAudioDevice Failed");
-        }
-        if (!SetAudioRate(format.SampleRate))
-        {
-            Console.Error.WriteLine("SetAudioRate Failed");
-            return false;
-        }
-
-        return true;
-    }
-
     private void PopulateSampleRates(int deviceNumber)
     {
-        int[] standardRates = { 48000, 96000, 192000, 384000 };
+        IReadOnlyList<int> standardRates = AudioSampleRates.Standard;
 
-        mSuppressEvents = true;
-        SampleRatesComboBox.Items.Clear();
         mNumberofRates = 0;
+        var labels = new List<string>(standardRates.Count);
 
         if (deviceNumber < 0)
         {
             // Audio device is null / "Playback/Sim": offer the standard rates.
-            Console.Error.WriteLine("Audio Device is Null");
             foreach (int rate in standardRates)
             {
-                SampleRatesComboBox.Items.Add(rate.ToString(CultureInfo.InvariantCulture) + " Hz");
+                labels.Add(rate.ToString(CultureInfo.InvariantCulture) + " Hz");
                 mAvalableRates[mNumberofRates] = rate;
                 mNumberofRates++;
             }
@@ -982,39 +840,37 @@ public partial class MainWindow : Window
             {
                 if (supported.Contains(rate) && mNumberofRates < mAvalableRates.Length)
                 {
-                    SampleRatesComboBox.Items.Add(rate.ToString(CultureInfo.InvariantCulture) + " Hz");
+                    labels.Add(rate.ToString(CultureInfo.InvariantCulture) + " Hz");
                     mAvalableRates[mNumberofRates] = rate;
                     mNumberofRates++;
                 }
             }
         }
-
-        mSuppressEvents = false;
-        SampleRatesComboBox.SelectedIndex = -1;
-        if (SampleRatesComboBox.ItemCount > 0)
-            SampleRatesComboBox.SelectedIndex = 0;
+        using (mSelectionCoordinator.SuppressEvents())
+        {
+            mViewModel.SetSampleRateLabels(labels);
+            mViewModel.SelectedSampleRateIndex = -1;
+        }
+        if (mViewModel.SampleRateLabels.Count > 0)
+        {
+            mSelectionCoordinator.SetSelectedSampleRateIndex(0);
+        }
     }
 
     private bool SetAudioRate(int rate)
     {
-        int index = FindData(mAvalableRates, mNumberofRates, rate);
-        if (index != -1)
-        {
-            SampleRatesComboBox.SelectedIndex = index;
-            return true;
-        }
-        return false;
+        return mSelectionCoordinator.SetAudioRate(rate);
     }
 
     private bool SetAudioDevice(string name)
     {
-        int index = FindText(InputDeviceComboBox, name, matchContains: false);
-        if (index != -1)
-        {
-            InputDeviceComboBox.SelectedIndex = index;
-            return true;
-        }
-        return false;
+        return mSelectionCoordinator.SetAudioDevice(name);
+    }
+
+    private void RestorePlaybackOrSimulationAudioState()
+    {
+        SetAudioDevice(mDeviceNameBeforePlaybackOrSim);
+        SetAudioRate(mRateBeforePlaybackOrSim);
     }
 
     private void GetAudioRate(out int rate)
@@ -1024,32 +880,28 @@ public partial class MainWindow : Window
 
     private void GetAudioDevice(out string name)
     {
-        name = CurrentText(InputDeviceComboBox);
+        name = CurrentInputDeviceText();
     }
 
     private void SetGuiRunMode()
     {
-        UiModeState.ApplyRunning(StartPushButton, StopPushButton, RunLockedControls());
+        mViewModel.SetRunning();
     }
 
     private void SetGuiStartingMode()
     {
-        UiModeState.ApplyStarting(StartPushButton, StopPushButton, RunLockedControls());
+        mViewModel.SetStarting();
     }
 
     private void SetGuiStoppingMode()
     {
-        UiModeState.ApplyStopping(StartPushButton, StopPushButton, RunLockedControls());
+        mViewModel.SetStopping();
     }
 
     private void SetGuiStopMode()
     {
-        UiModeState.ApplyStopped(
-            StartPushButton,
-            StopPushButton,
-            RunLockedControls(),
-            SampleRatesComboBox,
-            CurrentText(ModeComboBox) != ModeStrings[PLAYBACK]);
+        mViewModel.SetModeAllowsSampleRate(CurrentModeText() != ModeStrings[PLAYBACK]);
+        mViewModel.SetStopped();
     }
 
     private async Task<bool> LiveStart()
@@ -1062,42 +914,50 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             InvalidateRunSession();
-            StopAudioWorker();
+            StopInputWorker("Audio");
             StopAnalysisThread();
             AudioCloseCheck();
-            StatusBarText.Text = "Failed to start live audio";
-            await ShowCriticalDialog("Error", "Failed to start live audio: " + ex.Message);
+            mViewModel.StatusText = "Failed to start live audio";
+            await mDialogs.ShowErrorAsync("Error", "Failed to start live audio: " + ex.Message);
             return false;
         }
         SetGuiRunMode();
-        StatusBarText.Text = "Running";
+        mViewModel.StatusText = "Running";
         return true;
     }
 
     private async Task<bool> PlaybackStart()
     {
-        bool status = false;
-
-        // Equivalent to the QFileDialog re-open loop: keep prompting until a valid file is opened
-        // or the user cancels.
-        string? selected = null;
-        while (true)
+        PlaybackFileSelectionResult selection = await mPlaybackFileService.SelectPlaybackFileAsync(mCurrentDir);
+        if (!selection.Selected || selection.FilePath == null)
         {
-            string? picked = await ShowOpenWavDialog();
-            if (picked == null) break; // dialog rejected/cancelled
-            selected = picked;
-            if (status = await OpenFile(picked)) break;
-        }
-        if (!status || selected == null) return false;
-        if (!await RecordSessionCheck())
-        {
-            SetAudioDevice(mDeviceNameBeforePlaybackOrSim);
-            SetAudioRate(mRateBeforePlaybackOrSim);
+            if (!string.IsNullOrEmpty(selection.StatusMessage))
+            {
+                mViewModel.StatusText = selection.StatusMessage;
+            }
             return false;
         }
-        StartPlaybackThread(selected);
+
+        mCurrentDir = selection.CurrentDirectory;
+        GetAudioRate(out mRateBeforePlaybackOrSim);
+        GetAudioDevice(out mDeviceNameBeforePlaybackOrSim);
+        if (!SetAudioDevice(PLAYBACK_OR_SIM_PCM))
+        {
+            Console.Error.WriteLine("SetAudioDevice Failed");
+        }
+        if (!SetAudioRate(selection.SampleRate))
+        {
+            Console.Error.WriteLine("SetAudioRate Failed");
+            return false;
+        }
+        if (!await RecordSessionCheck())
+        {
+            RestorePlaybackOrSimulationAudioState();
+            return false;
+        }
+        StartPlaybackThread(selection.FilePath);
         SetGuiRunMode();
-        StatusBarText.Text = "Running";
+        mViewModel.StatusText = "Running";
         return true;
     }
 
@@ -1105,17 +965,18 @@ public partial class MainWindow : Window
     {
         // RealisticCheckBox -> realistic config; otherwise clean config
         // (MainWindow.cpp: watch_synth_stream_realistic_config / watch_synth_stream_clean_config).
-        WatchSynthStreamConfig cfg = RealisticCheckBox.IsChecked == true
+        WatchSynthStreamConfig cfg = mViewModel.Realistic
             ? WatchSynthStreamConfig.Realistic()
             : WatchSynthStreamConfig.Clean();
 
-        cfg.Bph = SimBPH[SimBPHComboBox.SelectedIndex];
-        cfg.SampleRateHz = (uint)mAvalableRates[SampleRatesComboBox.SelectedIndex];
-        cfg.BeatErrorMs = -(double)(SimBeatErrorSpinBox.Value ?? 0m);
+        SimulationSelection selection = mRunSelectionResolver.GetSimulationSelection(mAvalableRates, mNumberofRates);
+        cfg.Bph = selection.Bph;
+        cfg.SampleRateHz = (uint)selection.SampleRate;
+        cfg.BeatErrorMs = -(double)mViewModel.SimBeatError;
         cfg.PcmPeakAmplitude = 0.40; // normalized float PCM digital output level
-        cfg.WatchAmplitudeDegrees = (double)(SimAmplitudeSpinBox.Value ?? 0m);
-        cfg.LiftAngleDegrees = (double)(LiftAngleSpinBox.Value ?? 0m);
-        cfg.RateErrorSPerDay = (double)(SimErrorRateSpinBox.Value ?? 0m);
+        cfg.WatchAmplitudeDegrees = (double)mViewModel.SimAmplitude;
+        cfg.LiftAngleDegrees = (double)mViewModel.LiftAngle;
+        cfg.RateErrorSPerDay = (double)mViewModel.SimErrorRate;
 
         if (!await RecordSessionCheck()) return false;
         GetAudioRate(out mRateBeforePlaybackOrSim);
@@ -1130,83 +991,11 @@ public partial class MainWindow : Window
         }
         StartSimThread(cfg);
         SetGuiRunMode();
-        StatusBarText.Text = "Running";
+        mViewModel.StatusText = "Running";
         return true;
     }
 
     // --- Event handlers (Qt on_* slots) ---
-
-    private void OnModeComboBoxChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (mSuppressEvents) return;
-        string arg1 = CurrentText(ModeComboBox);
-
-        if (arg1 != ModeStrings[LIVE])
-            SetAudioDevice(PLAYBACK_OR_SIM_PCM);
-        if (arg1 == ModeStrings[PLAYBACK])
-        {
-            SampleRatesComboBox.IsEnabled = false;
-        }
-        else
-        {
-            SampleRatesComboBox.IsEnabled = true;
-        }
-        if (arg1 == ModeStrings[LIVE])
-        {
-            bool isSet = false;
-            int len = PreferredAudioDevices.Length;
-            for (int i = 0; i < len; i++)
-            {
-                int index = FindText(InputDeviceComboBox, PreferredAudioDevices[i], matchContains: true);
-                if (index != -1)
-                {
-                    InputDeviceComboBox.SelectedIndex = index;
-                    isSet = true;
-                    break;
-                }
-            }
-            if (!isSet)
-            {
-                for (int i = 0; i < InputDeviceComboBox.ItemCount; ++i)
-                {
-                    if (ItemText(InputDeviceComboBox, i) != PLAYBACK_OR_SIM_PCM)
-                    {
-                        InputDeviceComboBox.SelectedIndex = i;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    private void OnRefreshPushButtonClicked(object? sender, RoutedEventArgs e)
-    {
-        LoadAudioDevices();
-    }
-
-    private void OnLiftAngleSpinBoxPropertyChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)
-    {
-        // Qt's QSpinBox::valueChanged(int). Mirror with Value property changes.
-        if (e.Property != NumericUpDown.ValueProperty) return;
-        mLiftAngle = (double)(LiftAngleSpinBox.Value ?? 0m);
-        Console.Error.WriteLine("Lift Angle Value=" + mLiftAngle.ToString(CultureInfo.InvariantCulture));
-    }
-
-    private void OnAveragingPeriodComboBoxChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        int idx = AveragingPeriodComboBox.SelectedIndex;
-        if (idx < 0 || idx >= AveragingPeriodList.Length) return;
-        mAveragingPeriod = AveragingPeriodList[idx];
-        Console.Error.WriteLine("Averaging Period Value=" + mAveragingPeriod.ToString(CultureInfo.InvariantCulture));
-    }
-
-    private void OnMicrophoneSliderPropertyChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)
-    {
-        // Qt's sliderMoved fires on user drag. Mirror with Value changes:
-        // LocalSetAudioInputVolume(sliderPosition()/1000.0) -> SetAudioInputVolume.
-        if (e.Property != Slider.ValueProperty) return;
-        mAudioWorker?.SetVolume((float)(MicrophoneHorizontalSlider.Value / 1000.0));
-    }
 
     private void OnGraphicsTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -1227,186 +1016,41 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnStartPushButtonClicked(object? sender, RoutedEventArgs e)
+    private async Task StartRunAsync()
     {
-        if (mStartInProgress || mIsClosing)
-        {
-            return;
-        }
-
-        mStartInProgress = true;
-        SetGuiStartingMode();
-        StatusBarText.Text = "Starting";
-        bool started = false;
-
-        try
-        {
-            string mode = CurrentText(ModeComboBox);
-            if (mode == ModeStrings[LIVE])
-            {
-                ConfigureSoundCard();
-                started = await LiveStart();
-            }
-            else if (mode == ModeStrings[PLAYBACK])
-            {
-                started = await PlaybackStart();
-            }
-            else if (mode == ModeStrings[SIM])
-            {
-                started = await SimStart();
-            }
-        }
-        catch (Exception ex)
-        {
-            InvalidateRunSession();
-            StopAudioWorker();
-            StopPlaybackWorkerImmediate();
-            StopSimWorkerImmediate();
-            StopAnalysisThread();
-            AudioCloseCheck();
-            StatusBarText.Text = "Failed to start";
-            await ShowCriticalDialog("Error", "Failed to start: " + ex.Message);
-        }
-        finally
-        {
-            mStartInProgress = false;
-            if (!started && !mIsClosing)
-            {
-                SetGuiStopMode();
-                if (StatusBarText.Text == "Starting")
-                {
-                    StatusBarText.Text = "Stopped";
-                }
-            }
-        }
+        await mRunCommandService.StartAsync();
     }
 
-    private void OnStopPushButtonClicked(object? sender, RoutedEventArgs e)
+    private void TogglePauseRun()
     {
-        SetGuiStoppingMode();
-        StopOutcome outcome = StopOutcome.Stopped;
-
-        string mode = CurrentText(ModeComboBox);
-        if (mode == ModeStrings[LIVE])
-        {
-            outcome = CombineStopOutcome(outcome, StopAudioThread());
-            outcome = CombineStopOutcome(outcome, StopAnalysisThread());
-        }
-        else if (mode == ModeStrings[PLAYBACK])
-        {
-            outcome = CombineStopOutcome(outcome, StopPlaybackThread());
-            outcome = CombineStopOutcome(outcome, StopAnalysisThread());
-        }
-        else if (mode == ModeStrings[SIM])
-        {
-            outcome = CombineStopOutcome(outcome, StopSimThread());
-            outcome = CombineStopOutcome(outcome, StopAnalysisThread());
-        }
-
-        bool audioClosed = outcome == StopOutcome.Stopped && AudioCloseCheck();
-        if (outcome != StopOutcome.Stopped || !audioClosed)
-        {
-            SetGuiStoppingMode();
-            if (StatusBarText.Text == "Running" || StatusBarText.Text == "Starting")
-            {
-                StatusBarText.Text = "Stopping";
-            }
-            return;
-        }
-
-        InvalidateRunSession();
-        if (mode == ModeStrings[PLAYBACK] || mode == ModeStrings[SIM])
-        {
-            SetAudioDevice(mDeviceNameBeforePlaybackOrSim);
-            SetAudioRate(mRateBeforePlaybackOrSim);
-        }
-
-        SetGuiStopMode();
-        StatusBarText.Text = "Stopped";
+        mRunCommandService.TogglePause();
     }
 
-    private void OnInputDeviceComboBoxChanged(object? sender, SelectionChangedEventArgs e)
+    private void SetWorkersPaused(bool paused)
     {
-        if (mSuppressEvents) return;
-
-        int deviceNumber;
-        if (CurrentText(InputDeviceComboBox) != PLAYBACK_OR_SIM_PCM)
-        {
-            deviceNumber = CurrentInputDeviceNumber();
-
-            int index = FindText(ModeComboBox, ModeStrings[LIVE], matchContains: false);
-            if (index != -1) ModeComboBox.SelectedIndex = index;
-        }
-        else // PLAYBACK_OR_SIM_PCM
-        {
-            deviceNumber = -1;
-            if (CurrentText(ModeComboBox) == ModeStrings[LIVE])
-            {
-                int index = FindText(ModeComboBox, ModeStrings[PLAYBACK], matchContains: false);
-                if (index != -1) ModeComboBox.SelectedIndex = index;
-            }
-        }
-
-        PopulateSampleRates(deviceNumber);
+        mInputWorker?.SetPaused(paused);
     }
 
-    private void OnSampleRatesComboBoxChanged(object? sender, SelectionChangedEventArgs e)
+    private void StopRun()
     {
-        if (mSuppressEvents) return;
-        int index = SampleRatesComboBox.SelectedIndex;
-        if (index < 0) return;
-        if ((index + 1) > mNumberofRates) return;
-        mCurrentSamplesPerSecond = mAvalableRates[index];
-        Console.Error.WriteLine("Sample Rate is " + mCurrentSamplesPerSecond.ToString(CultureInfo.InvariantCulture) +
-                                " Index " + index.ToString(CultureInfo.InvariantCulture));
+        mRunCommandService.Stop();
     }
 
     // --- Helpers ---
 
     private int CurrentInputDeviceNumber()
     {
-        int idx = InputDeviceComboBox.SelectedIndex;
-        if (idx >= 0 && idx < mInputDeviceNumbers.Count) return mInputDeviceNumbers[idx];
-        return -1;
+        return mSelectionCoordinator.CurrentInputDeviceNumber;
     }
 
-    private static string CurrentText(ComboBox combo)
+    private string CurrentInputDeviceText()
     {
-        return ItemText(combo, combo.SelectedIndex);
+        return mSelectionCoordinator.CurrentInputDeviceText;
     }
 
-    private static string ItemText(ComboBox combo, int index)
+    private string CurrentModeText()
     {
-        if (index < 0 || index >= combo.ItemCount) return "";
-        return combo.Items[index]?.ToString() ?? "";
-    }
-
-    // findText: returns combo index whose item text matches (exact or contains).
-    private static int FindText(ComboBox combo, string text, bool matchContains)
-    {
-        for (int i = 0; i < combo.ItemCount; i++)
-        {
-            string itemText = ItemText(combo, i);
-            if (matchContains)
-            {
-                if (itemText.Contains(text, StringComparison.Ordinal)) return i;
-            }
-            else
-            {
-                if (itemText == text) return i;
-            }
-        }
-        return -1;
-    }
-
-    // findData: returns index in the available-rates table that equals 'rate'.
-    private static int FindData(int[] rates, int count, int rate)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (rates[i] == rate) return i;
-        }
-        return -1;
+        return mSelectionCoordinator.CurrentModeText;
     }
 
     private static double ParseDouble(string? text)
@@ -1416,22 +1060,17 @@ public partial class MainWindow : Window
         return double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out double v) ? v : 0.0;
     }
 
-    private static string ToNativeSeparators(string path)
-    {
-        return path.Replace('/', Path.DirectorySeparatorChar);
-    }
-
     private AnalysisRunSettings BuildRunSettings()
     {
-        bool autoBph = BPHComboBox.SelectedIndex == 0;
+        AnalysisSelection selection = mRunSelectionResolver.GetAnalysisSelection();
         return new AnalysisRunSettings(
             SampleRate: mCurrentSamplesPerSecond,
-            LiftAngle: mLiftAngle,
-            AveragingPeriod: mAveragingPeriod,
-            UseCOnset: UseConsetCheckBox.IsChecked == true,
-            AutoBph: autoBph,
-            ManualBph: autoBph ? 0 : ManualAutoBPH[BPHComboBox.SelectedIndex],
-            HpfCutoffHz: ParseDouble(HighLineEdit.Text),
+            LiftAngle: (double)mViewModel.LiftAngle,
+            AveragingPeriod: selection.AveragingPeriod,
+            UseCOnset: mViewModel.UseCOnset,
+            AutoBph: selection.AutoBph,
+            ManualBph: selection.ManualBph,
+            HpfCutoffHz: ParseDouble(mViewModel.HighPassCutoffText),
             SoundImageWidth: EffectivePixelWidth(SoundImageControl(), DEFAULT_SOUND_IMAGE_WIDTH),
             SoundImageHeight: EffectivePixelHeight(SoundImageControl(), DEFAULT_SOUND_IMAGE_HEIGHT),
             ScopeSnapshotPointBudget: InfoTabCatalog.ScopeTargetPointBudget);
@@ -1454,7 +1093,7 @@ public partial class MainWindow : Window
     {
         return new AnalysisTabRenderContext(
             SampleRate: mCurrentSamplesPerSecond,
-            ScopeScale: Math.Max(1, (int)(ScopeScaleSpinBox.Value ?? 1m)));
+            ScopeScale: Math.Max(1, (int)mViewModel.ScopeScale));
     }
 
     private string ActiveInfoTabId()
@@ -1473,27 +1112,6 @@ public partial class MainWindow : Window
         return InfoTabCatalog.Get(ActiveInfoTabId()).RefreshIntervalMs;
     }
 
-    private IReadOnlyList<Control> RunLockedControls()
-    {
-        return new Control[]
-        {
-            InputDeviceComboBox,
-            SampleRatesComboBox,
-            BPHComboBox,
-            ModeComboBox,
-            RefreshPushButton,
-            AveragingPeriodComboBox,
-            LiftAngleSpinBox,
-            SimAmplitudeSpinBox,
-            SimBeatErrorSpinBox,
-            SimBPHComboBox,
-            SimErrorRateSpinBox,
-            RealisticCheckBox,
-            UseConsetCheckBox,
-            HighLineEdit,
-        };
-    }
-
     private static int EffectivePixelWidth(Control control, int fallback)
     {
         double value = control.Bounds.Width > 0 ? control.Bounds.Width : control.Width;
@@ -1506,109 +1124,157 @@ public partial class MainWindow : Window
         return Math.Max(1, (int)Math.Round(double.IsNaN(value) || value <= 0 ? fallback : value));
     }
 
-    // --- Dialogs (replace QMessageBox / QFileDialog) ---
-
-    private enum DialogResult { Yes, No, Cancel }
-
-    private async Task<DialogResult> ShowRecordSessionDialog()
+    private sealed class MainWindowSelectionOperations : IMainWindowSelectionOperations
     {
-        var dialog = new Window
+        private readonly MainWindow _owner;
+
+        public MainWindowSelectionOperations(MainWindow owner)
         {
-            Title = "Record Session",
-            Width = 360,
-            Height = 150,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-
-        var result = DialogResult.No; // default button = No
-
-        var yes = new Button { Content = "Yes", Width = 80, IsDefault = false };
-        var no = new Button { Content = "No", Width = 80, IsDefault = true };
-        var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
-        yes.Click += (_, _) => { result = DialogResult.Yes; dialog.Close(); };
-        no.Click += (_, _) => { result = DialogResult.No; dialog.Close(); };
-        cancel.Click += (_, _) => { result = DialogResult.Cancel; dialog.Close(); };
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
-        };
-        buttons.Children.Add(yes);
-        buttons.Children.Add(no);
-        buttons.Children.Add(cancel);
-
-        var panel = new StackPanel { Margin = new Avalonia.Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = "Record Session", FontWeight = FontWeight.Bold });
-        panel.Children.Add(new TextBlock { Text = "Do you want to record this session ?", TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(buttons);
-        dialog.Content = panel;
-
-        await dialog.ShowDialog(this);
-        return result;
-    }
-
-    private async Task ShowCriticalDialog(string title, string message)
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 320,
-            Height = 130,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        var ok = new Button { Content = "OK", Width = 80, IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right };
-        ok.Click += (_, _) => dialog.Close();
-        var panel = new StackPanel { Margin = new Avalonia.Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(ok);
-        dialog.Content = panel;
-        await dialog.ShowDialog(this);
-    }
-
-    private async Task<string?> ShowOpenWavDialog()
-    {
-        var sp = StorageProvider;
-        IReadOnlyList<IStorageFolder>? startFolder = null;
-        try
-        {
-            var folder = await sp.TryGetFolderFromPathAsync(mCurrentDir);
-            if (folder != null) startFolder = new[] { folder };
+            _owner = owner;
         }
-        catch { /* ignore */ }
 
-        var files = await sp.OpenFilePickerAsync(new FilePickerOpenOptions
+        public IReadOnlyList<int> InputDeviceNumbers => _owner.mInputDeviceNumbers;
+
+        public int AvailableSampleRateCount => _owner.mNumberofRates;
+
+        public int GetAvailableSampleRate(int index)
         {
-            Title = "Open Document",
-            AllowMultiple = false,
-            SuggestedStartLocation = startFolder?[0],
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("WAV Files") { Patterns = new[] { "*.wav" } },
-            },
-        });
+            return _owner.mAvalableRates[index];
+        }
 
-        if (files.Count == 0) return null;
-        return files[0].TryGetLocalPath();
+        public void PopulateSampleRates(int deviceNumber)
+        {
+            _owner.PopulateSampleRates(deviceNumber);
+        }
+
+        public void SetCurrentSampleRate(int sampleRate)
+        {
+            _owner.mCurrentSamplesPerSecond = sampleRate;
+        }
+
+        public void SetAudioInputVolume(float normalizedVolume)
+        {
+            if (_owner.mInputWorker is ILiveAudioWorker liveWorker)
+            {
+                liveWorker.SetVolume(normalizedVolume);
+            }
+        }
     }
 
-    private async Task<string?> ShowSaveWavDialog()
+    private sealed class RunCommandOperations : IRunCommandOperations
     {
-        var sp = StorageProvider;
-        var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+        private readonly MainWindow _owner;
+
+        public RunCommandOperations(MainWindow owner)
         {
-            Title = "Save Output File",
-            DefaultExtension = "wav",
-            FileTypeChoices = new[]
+            _owner = owner;
+        }
+
+        public bool IsClosing => _owner.mIsClosing;
+
+        public bool HasActiveWorker => _owner.mInputWorker != null;
+
+        public RunCommandMode CurrentMode
+        {
+            get
             {
-                new FilePickerFileType("Wav Files") { Patterns = new[] { "*.wav" } },
-                new FilePickerFileType("All Files") { Patterns = new[] { "*" } },
-            },
-        });
-        return file?.TryGetLocalPath();
+                string mode = _owner.CurrentModeText();
+                if (mode == ModeStrings[LIVE])
+                {
+                    return RunCommandMode.Live;
+                }
+
+                if (mode == ModeStrings[PLAYBACK])
+                {
+                    return RunCommandMode.Playback;
+                }
+
+                if (mode == ModeStrings[SIM])
+                {
+                    return RunCommandMode.Simulation;
+                }
+
+                return RunCommandMode.Unknown;
+            }
+        }
+
+        public void ConfigureLiveAudio()
+        {
+            _owner.ConfigureSoundCard();
+        }
+
+        public Task<bool> StartLiveAsync()
+        {
+            return _owner.LiveStart();
+        }
+
+        public Task<bool> StartPlaybackAsync()
+        {
+            return _owner.PlaybackStart();
+        }
+
+        public Task<bool> StartSimulationAsync()
+        {
+            return _owner.SimStart();
+        }
+
+        public void SetWorkersPaused(bool paused)
+        {
+            _owner.SetWorkersPaused(paused);
+        }
+
+        public void CleanupFailedStart()
+        {
+            _owner.InvalidateRunSession();
+            _owner.StopInputWorker("Input");
+            _owner.StopAnalysisThread();
+            _owner.AudioCloseCheck();
+        }
+
+        public Task ShowStartFailureAsync(Exception exception)
+        {
+            return _owner.mDialogs.ShowErrorAsync("Error", "Failed to start: " + exception.Message);
+        }
+
+        public RunCommandStopOutcome StopLive()
+        {
+            StopOutcome outcome = CombineStopOutcome(_owner.StopAudioThread(), _owner.StopAnalysisThread());
+            return MapStopOutcome(outcome);
+        }
+
+        public RunCommandStopOutcome StopPlayback()
+        {
+            StopOutcome outcome = CombineStopOutcome(_owner.StopPlaybackThread(), _owner.StopAnalysisThread());
+            return MapStopOutcome(outcome);
+        }
+
+        public RunCommandStopOutcome StopSimulation()
+        {
+            StopOutcome outcome = CombineStopOutcome(_owner.StopSimThread(), _owner.StopAnalysisThread());
+            return MapStopOutcome(outcome);
+        }
+
+        public bool CloseAudio()
+        {
+            return _owner.AudioCloseCheck();
+        }
+
+        public void InvalidateRunSession()
+        {
+            _owner.InvalidateRunSession();
+        }
+
+        public void RestorePlaybackOrSimulationAudioState()
+        {
+            _owner.RestorePlaybackOrSimulationAudioState();
+        }
+
+        private static RunCommandStopOutcome MapStopOutcome(StopOutcome outcome)
+        {
+            return outcome == StopOutcome.Stopped
+                ? RunCommandStopOutcome.Stopped
+                : RunCommandStopOutcome.Stopping;
+        }
     }
 
 }

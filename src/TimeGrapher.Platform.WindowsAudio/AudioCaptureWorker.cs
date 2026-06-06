@@ -14,7 +14,7 @@ namespace TimeGrapher.Platform.WindowsAudio;
 /// shared <see cref="MasterAudioBuffer"/>, maintains the original 2-second FPS/SPS/SPF
 /// statistics, and raises <see cref="DataReady"/> after each captured block.
 /// </summary>
-public sealed class AudioCaptureWorker : IDisposable
+public sealed class AudioCaptureWorker : IAudioInputWorker
 {
     private const int Channels = MasterAudioBuffer.Channels; // mono
 
@@ -22,6 +22,7 @@ public sealed class AudioCaptureWorker : IDisposable
 
     private WaveInEvent? _audioInput;
     private float _volume = 1.0f;
+    private volatile bool _paused;
 
     // 2-second statistics state (mirrors AudioWorker.cpp).
     private bool _timerStarted;
@@ -32,6 +33,8 @@ public sealed class AudioCaptureWorker : IDisposable
 
     /// <summary>Raised on the capture callback thread after each block is written.</summary>
     public event Action? DataReady;
+
+    public bool IsPaused => _paused;
 
     public AudioCaptureWorker(MasterAudioBuffer buffer)
     {
@@ -50,6 +53,7 @@ public sealed class AudioCaptureWorker : IDisposable
     public void Start(int deviceNumber, int sampleRate, float volume)
     {
         _volume = volume;
+        _paused = false;
 
         if (_audioInput != null)
         {
@@ -76,8 +80,18 @@ public sealed class AudioCaptureWorker : IDisposable
         _volume = volume;
     }
 
+    public void SetPaused(bool paused)
+    {
+        _paused = paused;
+    }
+
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
+        if (_paused)
+        {
+            return;
+        }
+
         if (!_timerStarted)
         {
             _timerStarted = true;
@@ -135,6 +149,7 @@ public sealed class AudioCaptureWorker : IDisposable
 
     public bool TryStop(TimeSpan timeout)
     {
+        _paused = false;
         WaveInEvent? audioInput = Interlocked.Exchange(ref _audioInput, null);
         if (audioInput == null)
         {
@@ -207,8 +222,7 @@ public sealed class AudioCaptureWorker : IDisposable
     public static IReadOnlyList<int> GetCandidateSampleRates(int deviceNumber)
     {
         _ = deviceNumber;
-        // Original standard rates list: {48000, 96000, 192000, 384000}.
-        return new[] { 48000, 96000, 192000, 384000 };
+        return AudioSampleRates.Standard;
     }
 
     [Obsolete("Use GetCandidateSampleRates; live capture support is validated by Start().")]

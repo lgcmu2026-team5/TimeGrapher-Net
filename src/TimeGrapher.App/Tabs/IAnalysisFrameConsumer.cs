@@ -2,7 +2,7 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Tabs;
 
-public interface IAnalysisFrameConsumer
+internal interface IAnalysisFrameConsumer
 {
     string TabId { get; }
 

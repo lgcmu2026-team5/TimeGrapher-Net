@@ -19,21 +19,10 @@ namespace TimeGrapher.Core.Detection;
 internal static class Bph
 {
     /* Auto-detect BPH list (common rates). TG_AUTO_BPH_LIST. */
-    public static readonly int[] AutoBphList =
-    {
-        12000, 14400, 18000, 19800, 21600, 25200, 28800, 36000, 43200
-    };
+    public static readonly int[] AutoBphList = BphCatalog.AutoBphArray;
 
     /* Manual-mode BPH list (wider range of antique rates). TG_MANUAL_BPH_LIST. */
-    public static readonly int[] ManualBphList =
-    {
-         3600,  6000,  7200,  7380,  7440,  7800,  9000,  9100, 10800, 11880,
-        12000, 12342, 12480, 12600, 13320, 13440, 13500, 14000, 14040, 14160,
-        14200, 14280, 14400, 14520, 14580, 14760, 14850, 15000, 15360, 15600,
-        16200, 16320, 16800, 17196, 17258, 17280, 17786, 17897, 18000, 18049,
-        18514, 19332, 19440, 19800, 20160, 20222, 20944, 21000, 21031, 21306,
-        21600, 25200, 28800, 32400, 36000, 43200
-    };
+    public static readonly int[] ManualBphList = BphCatalog.ManualBphArray;
 
     // tg_is_valid_manual_bph
     public static bool IsValidManualBph(int bph)

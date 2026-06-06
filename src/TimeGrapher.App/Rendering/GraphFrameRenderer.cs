@@ -8,7 +8,7 @@ namespace TimeGrapher.App.Rendering;
 /// Small UI-thread facade for shared analysis UI state. Tab-specific rendering lives
 /// in RateScopeRenderer and SoundPrintRenderer.
 /// </summary>
-public sealed class GraphFrameRenderer
+internal sealed class GraphFrameRenderer
 {
     private readonly IReadOnlyList<IAnalysisFrameConsumer> _consumers;
     private readonly TextBlock _results;
