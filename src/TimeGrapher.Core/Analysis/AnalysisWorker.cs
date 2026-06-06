@@ -1,9 +1,5 @@
 using System.Diagnostics;
-using System.Globalization;
 using TimeGrapher.Core.AudioIo;
-using TimeGrapher.Core.Detection;
-using TimeGrapher.Core.Imaging;
-using TimeGrapher.Core.Metrics;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.Analysis;
@@ -32,46 +28,30 @@ public sealed class AnalysisWorker : IDisposable
         public double HpfCutoffHz = 0.0;
         public int SoundImageWidth = 0;
         public int SoundImageHeight = 0;
-        public WavStreamWriter? WavWriter = null;
+        public int ScopeSnapshotPointBudget = 8000;
+        public ISampleWriter? SampleWriter = null;
     }
 
     private const uint DetectorNumberOfSamples = 4096u;
-    private const int SoundPixelSize = 3;
-    private const int SoundImagePublishIntervalMs = 100;
-
-    // double inwardMarkerLength(int sample_rate): 500.0 * (sample_rate / 48000.0)
-    private static double InwardMarkerLength(int sampleRate)
-    {
-        return 500.0 * (sampleRate / 48000.0);
-    }
-
     private readonly MasterAudioBuffer _rawAudio;
     private readonly Config _config;
-    private readonly WatchMetrics _metrics;
-    private readonly TgConfig _detectorConfig;
-    private readonly TgDetector _ctx;
+    private readonly DetectorMetricsEngine _pipeline;
+    private readonly ScopeRateFrameProjector _scopeRateProjector;
+    private readonly SoundPrintFrameProjector _soundPrintProjector;
     private readonly float[] _inputBlock;
-    private readonly PixelBuffer _soundImage;
-    private readonly SoundImageRenderer _soundRenderer = new();
-    private readonly TgResult _result = new();
 
-    private bool _soundRenderHasBph = false;
-    private double _lastA = 0.0;
-    private bool _haveLastA = false;
-    private ulong _localGraphTicks = 0;
     private ulong _nextFrameSourceId = 1;
     private bool _foregroundTimerStarted = false;
     private readonly Stopwatch _foregroundTimer = new();
-    private readonly Stopwatch _soundImagePublishTimer = new();
     private double _foregroundLastTime = 0.0;
     private ulong _foregroundFrameCount = 0;
     private ulong _foregroundSampleCount = 0;
-    private bool _soundImagePublishPending = true;
 
     // Thread loop state (port-only; replaces Qt moveToThread).
     private Thread? _thread;
     private readonly AutoResetEvent _wakeup = new(false);
     private volatile bool _stopRequested = false;
+    private volatile bool _completionRequested = false;
 
     /// <summary>Raised on the analysis thread when a frame is ready.</summary>
     public event Action<AnalysisFrame>? AnalysisFrameReady;
@@ -80,47 +60,24 @@ public sealed class AnalysisWorker : IDisposable
     {
         _rawAudio = buffer;
         _config = config;
-        _metrics = new WatchMetrics(new WatchMetricsConfig
-        {
-            SampleRate = config.SampleRate,
-            LiftAngle = config.LiftAngle,
-            AveragingPeriod = config.AveragingPeriod,
-            MaxRateDataPoints = 250,
-            RateErrorYScale = 10.0,
-            RlsWindowInit = 100,
-        });
-
-        _detectorConfig = TgConfig.Default();
-        _detectorConfig.SampleRate = _config.SampleRate;
-        _detectorConfig.BphMode = _config.AutoBph ? TgBphMode.Auto : TgBphMode.Manual;
-        _detectorConfig.ManualBph = _config.ManualBph;
-        _detectorConfig.SuppressPreSyncEvents = true;
-        _detectorConfig.HpfCutoffHz = _config.HpfCutoffHz;
-
-        _ctx = new TgDetector(_detectorConfig);
+        _pipeline = new DetectorMetricsEngine(new DetectorMetricsEngineConfig(
+            config.SampleRate,
+            config.LiftAngle,
+            config.AveragingPeriod,
+            config.UseCOnset,
+            config.AutoBph,
+            config.ManualBph,
+            config.HpfCutoffHz));
 
         _inputBlock = new float[DetectorNumberOfSamples];
-
-        _soundImage = new PixelBuffer(_config.SoundImageWidth, _config.SoundImageHeight);
-        var soundImageConfig = new SoundImageRenderer.Config
-        {
-            Bph = 0.0,
-            SampleRateHz = _config.SampleRate,
-            SoundColor = Argb.Rgba(255, 0, 0, 255),
-            BackgroundColor = Argb.Rgba(255, 255, 255, 255),
-            Direction = SoundImageRenderer.VerticalTimeDirection.TopDown,
-            WarmupColumns = 2,
-            AnchorColumns = 12,
-            Gamma = 0.5f,
-            LivePreviewCurrentColumn = true,
-        };
-
-        if (!_soundRenderer.Initialize(_soundImage, soundImageConfig))
-        {
-            throw new InvalidOperationException("Failed to initialize SoundImageRenderer.");
-        }
-        _soundRenderer.Reset();
-        _metrics.Reset();
+        _scopeRateProjector = new ScopeRateFrameProjector(
+            config.SampleRate,
+            config.UseCOnset,
+            config.ScopeSnapshotPointBudget);
+        _soundPrintProjector = new SoundPrintFrameProjector(
+            config.SampleRate,
+            config.SoundImageWidth,
+            config.SoundImageHeight);
     }
 
     /// <summary>Starts the analysis thread (AutoResetEvent wait loop).</summary>
@@ -131,6 +88,7 @@ public sealed class AnalysisWorker : IDisposable
             return;
         }
         _stopRequested = false;
+        _completionRequested = false;
         _thread = new Thread(ThreadLoop)
         {
             Name = "AnalysisWorker",
@@ -149,14 +107,46 @@ public sealed class AnalysisWorker : IDisposable
     /// <summary>Stops the analysis thread and joins it.</summary>
     public void Stop()
     {
+        _ = TryStop(Timeout.InfiniteTimeSpan);
+    }
+
+    public bool TryStop(TimeSpan timeout)
+    {
         if (_thread == null)
         {
-            return;
+            return true;
         }
+
         _stopRequested = true;
         _wakeup.Set();
-        _thread.Join();
-        _thread = null;
+        Thread thread = _thread;
+        bool stopped = JoinThread(thread, timeout);
+        if (stopped)
+        {
+            _thread = null;
+        }
+
+        return stopped;
+    }
+
+    public bool CompleteInput(TimeSpan timeout)
+    {
+        if (_thread == null)
+        {
+            DrainAndFlushInput();
+            return true;
+        }
+
+        _completionRequested = true;
+        _wakeup.Set();
+        Thread thread = _thread;
+        bool stopped = JoinThread(thread, timeout);
+        if (stopped)
+        {
+            _thread = null;
+        }
+
+        return stopped;
     }
 
     private void ThreadLoop()
@@ -164,6 +154,11 @@ public sealed class AnalysisWorker : IDisposable
         while (true)
         {
             _wakeup.WaitOne();
+            if (_completionRequested)
+            {
+                DrainAndFlushInput();
+                break;
+            }
             if (_stopRequested)
             {
                 break;
@@ -174,42 +169,15 @@ public sealed class AnalysisWorker : IDisposable
 
     public void HandleInputData()
     {
-        ulong localTotalSamplesWritten;
-        lock (_rawAudio.Lock)
-        {
-            localTotalSamplesWritten = _rawAudio.TotalSamplesWritten;
-        }
+        HandleInputDataCore(stopInterruptible: true);
+    }
 
-        ulong pendingSamples = localTotalSamplesWritten - _rawAudio.AnalysisLastTotalSamplesWritten;
-        bool inputOverrun = false;
-        ulong inputSamplesDropped = 0;
-        if (pendingSamples > (ulong)_rawAudio.NumberOfAudioSamples)
-        {
-            inputOverrun = true;
-            inputSamplesDropped = pendingSamples - (ulong)_rawAudio.NumberOfAudioSamples;
-            _rawAudio.AnalysisLastTotalSamplesWritten = localTotalSamplesWritten - (ulong)_rawAudio.NumberOfAudioSamples;
-            _rawAudio.AnalysisLastWriteIndex =
-                (uint)(_rawAudio.AnalysisLastTotalSamplesWritten % (ulong)_rawAudio.NumberOfAudioSamples);
-            pendingSamples = (ulong)_rawAudio.NumberOfAudioSamples;
-        }
-
-        int samplesToAdd = (int)pendingSamples;
-        if (samplesToAdd <= 0)
-        {
-            return;
-        }
-
-        var frame = new AnalysisFrame
-        {
-            SessionId = _config.SessionId,
-            SourceId = _nextFrameSourceId++,
-            SourceSampleEnd = localTotalSamplesWritten,
-            InputOverrun = inputOverrun,
-            InputSamplesDropped = inputSamplesDropped,
-            BackgroundFps = _rawAudio.Fps,
-            BackgroundSps = _rawAudio.Sps,
-            BackgroundSpf = _rawAudio.Spf,
-        };
+    private void HandleInputDataCore(bool stopInterruptible)
+    {
+        var processingTimer = Stopwatch.StartNew();
+        MasterAudioBufferSnapshot snapshot = _rawAudio.GetSnapshot();
+        ulong sourceSampleEnd = snapshot.TotalSamplesWritten;
+        AnalysisFrame? frame = null;
 
         if (!_foregroundTimerStarted)
         {
@@ -220,268 +188,85 @@ public sealed class AnalysisWorker : IDisposable
             _foregroundSampleCount = 0;
         }
 
-        while (samplesToAdd > 0)
+        while (!stopInterruptible || !_stopRequested)
         {
-            if (_stopRequested)
+            MasterAudioBufferReadResult read = _rawAudio.CopyAnalysisSamples(_inputBlock, sourceSampleEnd);
+            if (read.SamplesCopied <= 0)
             {
-                return;
+                break;
             }
 
-            int slice = samplesToAdd > (int)DetectorNumberOfSamples
-                            ? (int)DetectorNumberOfSamples
-                            : samplesToAdd;
-
-            for (int i = 0; i < slice; i++)
+            frame ??= new AnalysisFrame
             {
-                _inputBlock[i] = _rawAudio.Samples[_rawAudio.AnalysisLastWriteIndex];
-                _rawAudio.AnalysisLastWriteIndex =
-                    (_rawAudio.AnalysisLastWriteIndex + 1) % (uint)_rawAudio.NumberOfAudioSamples;
+                SessionId = _config.SessionId,
+                SourceId = _nextFrameSourceId++,
+                SourceSampleEnd = sourceSampleEnd,
+                PendingSamples = read.OriginalPendingSamples,
+                BackgroundFps = read.Fps,
+                BackgroundSps = read.Sps,
+                BackgroundSpf = read.Spf,
+            };
+
+            if (read.InputOverrun)
+            {
+                frame.InputOverrun = true;
+                frame.InputSamplesDropped += read.InputSamplesDropped;
             }
 
-            var block = new ReadOnlySpan<float>(_inputBlock, 0, slice);
+            var block = new ReadOnlySpan<float>(_inputBlock, 0, read.SamplesCopied);
 
-            _config.WavWriter?.Write(block);
+            _config.SampleWriter?.Write(block);
 
-            _soundRenderer.ProcessSamples(block);
+            _soundPrintProjector.ProcessSamples(block);
 
-            _ctx.Process(block, _result);
-
-            ProcessDetectorResult(_result, slice, frame);
-            UpdateForegroundStats(slice, frame);
-            samplesToAdd -= slice;
+            DetectorMetricsBlockUpdate pipelineUpdate = _pipeline.Process(block);
+            _scopeRateProjector.Project(pipelineUpdate, frame);
+            _soundPrintProjector.Project(pipelineUpdate);
+            UpdateForegroundStats(read.SamplesCopied, frame);
         }
 
-        _rawAudio.AnalysisLastTotalSamplesWritten = localTotalSamplesWritten;
-        frame.GraphTickEnd = _localGraphTicks;
-        if (_soundImagePublishPending ||
-            !_soundImagePublishTimer.IsRunning ||
-            _soundImagePublishTimer.ElapsedMilliseconds >= SoundImagePublishIntervalMs)
+        if (frame == null)
         {
-            frame.SoundImage = _soundImage.Clone();
-            frame.SoundImageUpdated = true;
-            _soundImagePublishPending = false;
-            _soundImagePublishTimer.Restart();
+            return;
         }
-        AppendGraphSeries(frame);
+
+        _scopeRateProjector.AppendSnapshot(frame);
+        _soundPrintProjector.AppendSnapshot(frame);
+
+        MasterAudioBufferSnapshot endSnapshot = _rawAudio.GetSnapshot();
+        frame.AnalysisLagSamples = endSnapshot.TotalSamplesWritten > sourceSampleEnd
+            ? endSnapshot.TotalSamplesWritten - sourceSampleEnd
+            : 0;
+        frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
 
         AnalysisFrameReady?.Invoke(frame);
     }
 
-    private void ProcessDetectorResult(TgResult result, int slice, AnalysisFrame frame)
+    private void DrainAndFlushInput()
     {
-        // Q_UNUSED(slice)
-        _ = slice;
+        HandleInputDataCore(stopInterruptible: false);
 
-        double threshold = result.OnsetThreshold;
-        for (int i = 0; i < result.ProcessedPcmLen; i++)
+        var processingTimer = Stopwatch.StartNew();
+        MasterAudioBufferSnapshot snapshot = _rawAudio.GetSnapshot();
+        var frame = new AnalysisFrame
         {
-            frame.ScopeX.Add(_localGraphTicks);
-            frame.ScopePcm.Add(result.ProcessedPcm[i]);
-            frame.ScopeThreshold.Add(threshold);
-            _localGraphTicks++;
-        }
-
-        if (result.SyncLostEvent || result.DetectorResetEvent || result.SyncStatus != TgSyncStatus.Synced)
-        {
-            _soundRenderHasBph = false;
-            _soundRenderer.SetBph(0.0);
-        }
-        else if ((!_soundRenderHasBph || Math.Abs(_soundRenderer.CurrentBph - result.DetectedBph) > 0.5) &&
-                 result.SyncStatus == TgSyncStatus.Synced)
-        {
-            _soundRenderHasBph = true;
-            _soundRenderer.SetBph(result.DetectedBph);
-        }
-
-        for (int i = 0; i < result.Events.Count; i++)
-        {
-            if (result.Events[i].Type == TgEventType.A)
-            {
-                double value = result.Events[i].SampleIndex + result.Events[i].SubSampleOffset;
-                AppendAEvent(value, result.Events[i].PeakValue, result.SyncStatus == TgSyncStatus.Synced, result.DetectedBph, frame);
-            }
-            else if (result.Events[i].Type == TgEventType.C)
-            {
-                AppendCEvent(result.Events[i], result.SyncStatus == TgSyncStatus.Synced, result.DetectedBph, frame);
-            }
-            else
-            {
-                Console.Error.WriteLine("Unkown Event Type");
-            }
-        }
-    }
-
-    private void AppendAEvent(double eventSample, float peakValue, bool synced, int detectedBph, AnalysisFrame frame)
-    {
-        var vertical = new ScopeVerticalMarker
-        {
-            X = eventSample,
-            Height = peakValue,
-            Color = Argb.Green,
+            SessionId = _config.SessionId,
+            SourceId = _nextFrameSourceId++,
+            SourceSampleEnd = snapshot.TotalSamplesWritten,
+            PendingSamples = 0,
+            BackgroundFps = snapshot.Fps,
+            BackgroundSps = snapshot.Sps,
+            BackgroundSpf = snapshot.Spf,
         };
-        frame.VerticalMarkers.Add(vertical);
 
-        if (_haveLastA)
-        {
-            double delta = eventSample - _lastA;
+        DetectorMetricsBlockUpdate flushUpdate = _pipeline.Flush();
+        _scopeRateProjector.Project(flushUpdate, frame);
+        _soundPrintProjector.Project(flushUpdate);
+        _scopeRateProjector.AppendSnapshot(frame);
+        _soundPrintProjector.AppendSnapshot(frame, force: true);
+        frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
 
-            var horizontal = new ScopeHorizontalMarker
-            {
-                Direction = HorizontalMarkerDirection.Outward,
-                XLeft = _lastA,
-                XRight = eventSample,
-                Height = peakValue / 2.0,
-                Color = Argb.Black,
-            };
-            frame.HorizontalMarkers.Add(horizontal);
-
-            var textMarker = new ScopeTextMarker
-            {
-                X = _lastA + (delta / 2.0),
-                Height = peakValue / 2.0,
-                // QString(" %1 ms ").arg(delta * 1000.0 / sample_rate, 0, 'f', 2)
-                Text = " " + (delta * 1000.0 / _config.SampleRate).ToString("F2", CultureInfo.InvariantCulture) + " ms ",
-                Color = Argb.Black,
-                Alignment = MarkerTextAlignment.CenterTop, // Qt::AlignHCenter | Qt::AlignTop
-            };
-            frame.TextMarkers.Add(textMarker);
-        }
-
-        _lastA = eventSample;
-        _haveLastA = true;
-        AppendMetricsUpdate(_metrics.HandleAEvent(eventSample, synced, detectedBph), frame);
-
-        if (_soundRenderHasBph)
-        {
-            // markAEventAbsoluteSampleIndex takes quint64; double is implicitly truncated.
-            _soundRenderer.MarkAEventAbsoluteSampleIndex((ulong)eventSample, Argb.Rgba(0, 255, 0, 255), SoundPixelSize);
-        }
-    }
-
-    private void AppendCEvent(TgEvent ev, bool synced, int detectedBph, AnalysisFrame frame)
-    {
-        double eventSample;
-        if (_config.UseCOnset)
-        {
-            if (ev.OnsetValid)
-            {
-                eventSample = ev.OnsetSampleIndex + ev.OnsetSubSampleOffset;
-            }
-            else
-            {
-                Console.Error.WriteLine("Invalid C Onset using C peak");
-                eventSample = ev.SampleIndex + ev.SubSampleOffset;
-            }
-        }
-        else
-        {
-            eventSample = ev.SampleIndex + ev.SubSampleOffset;
-        }
-
-        WatchMetricsUpdate metricsUpdate = _metrics.HandleCEvent(eventSample, synced, detectedBph);
-
-        var vertical = new ScopeVerticalMarker
-        {
-            X = eventSample,
-            Height = ev.PeakValue,
-            Color = Argb.Red,
-        };
-        frame.VerticalMarkers.Add(vertical);
-
-        var horizontal = new ScopeHorizontalMarker
-        {
-            Direction = HorizontalMarkerDirection.Inward,
-            XLeft = _lastA,
-            XRight = eventSample,
-            Length = InwardMarkerLength(_config.SampleRate),
-            Height = ev.PeakValue,
-            Color = Argb.Black,
-        };
-        frame.HorizontalMarkers.Add(horizontal);
-
-        var textMarker = new ScopeTextMarker
-        {
-            X = eventSample + InwardMarkerLength(_config.SampleRate),
-            Height = ev.PeakValue,
-            Text = metricsUpdate.CMarkerText,
-            Color = Argb.Black,
-            Alignment = MarkerTextAlignment.LeftTop, // Qt::AlignLeft | Qt::AlignTop
-        };
-        frame.TextMarkers.Add(textMarker);
-
-        AppendMetricsUpdate(metricsUpdate, frame);
-
-        if (_soundRenderHasBph)
-        {
-            _soundRenderer.MarkCEventAbsoluteSampleIndex((ulong)eventSample, Argb.Rgba(0, 0, 255, 255), SoundPixelSize);
-        }
-    }
-
-    private void AppendMetricsUpdate(WatchMetricsUpdate update, AnalysisFrame frame)
-    {
-        if (update.TicRateUpdated)
-        {
-            frame.MetricsUpdate.TicRateUpdated = true;
-            frame.MetricsUpdate.XTic = update.XTic;
-            frame.MetricsUpdate.YTic = update.YTic;
-        }
-        if (update.TocRateUpdated)
-        {
-            frame.MetricsUpdate.TocRateUpdated = true;
-            frame.MetricsUpdate.XToc = update.XToc;
-            frame.MetricsUpdate.YToc = update.YToc;
-        }
-        if (update.ResultsUpdated)
-        {
-            frame.MetricsUpdate.ResultsUpdated = true;
-            frame.MetricsUpdate.ResultsText = update.ResultsText;
-        }
-    }
-
-    private void AppendGraphSeries(AnalysisFrame frame)
-    {
-        if (frame.ScopeX.Count != 0)
-        {
-            var pcmSeries = new GraphSeriesFrame
-            {
-                Id = AnalysisGraphSeries.ScopePcm,
-                X = frame.ScopeX,
-                Y = frame.ScopePcm,
-            };
-            frame.ScopeSeries.Add(pcmSeries);
-
-            var thresholdSeries = new GraphSeriesFrame
-            {
-                Id = AnalysisGraphSeries.ScopeThreshold,
-                X = frame.ScopeX,
-                Y = frame.ScopeThreshold,
-            };
-            frame.ScopeSeries.Add(thresholdSeries);
-        }
-
-        if (frame.MetricsUpdate.TicRateUpdated)
-        {
-            var ticSeries = new GraphSeriesFrame
-            {
-                Id = AnalysisGraphSeries.RateTic,
-                X = frame.MetricsUpdate.XTic,
-                Y = frame.MetricsUpdate.YTic,
-                Replace = true,
-            };
-            frame.RateSeries.Add(ticSeries);
-        }
-
-        if (frame.MetricsUpdate.TocRateUpdated)
-        {
-            var tocSeries = new GraphSeriesFrame
-            {
-                Id = AnalysisGraphSeries.RateToc,
-                X = frame.MetricsUpdate.XToc,
-                Y = frame.MetricsUpdate.YToc,
-                Replace = true,
-            };
-            frame.RateSeries.Add(tocSeries);
-        }
+        AnalysisFrameReady?.Invoke(frame);
     }
 
     private void UpdateForegroundStats(int slice, AnalysisFrame frame)
@@ -508,5 +293,16 @@ public sealed class AnalysisWorker : IDisposable
     {
         Stop();
         _wakeup.Dispose();
+    }
+
+    private static bool JoinThread(Thread thread, TimeSpan timeout)
+    {
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            thread.Join();
+            return true;
+        }
+
+        return thread.Join(timeout);
     }
 }

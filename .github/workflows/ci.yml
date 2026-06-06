@@ -7,6 +7,52 @@ on:
     branches: [ main ]
 
 jobs:
+  core-boundary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore Core boundary
+        run: |
+          dotnet restore tests/TimeGrapher.Core.Tests/TimeGrapher.Core.Tests.csproj --locked-mode
+          dotnet restore src/TimeGrapher.Verify/TimeGrapher.Verify.csproj --locked-mode
+
+      - name: Build Core boundary
+        run: |
+          dotnet build src/TimeGrapher.Core/TimeGrapher.Core.csproj -c Release --no-restore /p:TreatWarningsAsErrors=true
+          dotnet build src/TimeGrapher.Verify/TimeGrapher.Verify.csproj -c Release --no-restore /p:TreatWarningsAsErrors=true
+          dotnet build tests/TimeGrapher.Core.Tests/TimeGrapher.Core.Tests.csproj -c Release --no-restore /p:TreatWarningsAsErrors=true
+
+      - name: Test Core boundary
+        run: dotnet test tests/TimeGrapher.Core.Tests/TimeGrapher.Core.Tests.csproj -c Release --no-build --logger "trx;LogFilePrefix=core-test-results" --results-directory TestResults
+
+      - name: Verify generated WAV fixtures
+        run: dotnet run --project src/TimeGrapher.Verify/TimeGrapher.Verify.csproj -c Release --no-build -- --generated --byte-fixtures
+
+      - name: Check Core has no platform dependencies
+        shell: pwsh
+        run: |
+          $matches = Get-ChildItem src/TimeGrapher.Core -Recurse -File -Include *.cs,*.csproj |
+            Select-String -Pattern 'NAudio|TimeGrapher\.Platform|WindowsAudio'
+          if ($matches) {
+            $matches | ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line)" }
+            throw "Core project contains platform dependency text"
+          }
+
+      - name: Upload core test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-results
+          path: TestResults/**/*.trx
+
   build-test:
     runs-on: windows-latest
 
@@ -23,25 +69,58 @@ jobs:
         run: dotnet restore TimeGrapherNet.sln --locked-mode
 
       - name: Build
-        run: dotnet build TimeGrapherNet.sln -c Release --no-restore
+        run: dotnet build TimeGrapherNet.sln -c Release --no-restore /p:TreatWarningsAsErrors=true
 
       - name: Test
-        run: dotnet test TimeGrapherNet.sln -c Release --no-build
+        run: dotnet test TimeGrapherNet.sln -c Release --no-build --logger "trx;LogFilePrefix=test-results" --results-directory TestResults
 
-      - name: Optional golden WAV verification
-        shell: pwsh
-        run: |
-          if (Test-Path .\samples) {
-            dotnet run --project .\src\TimeGrapher.Verify\TimeGrapher.Verify.csproj -c Release --no-build -- .\samples
-          } else {
-            Write-Host "No tracked samples directory found; skipping golden WAV verification."
-          }
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+      - name: Generated WAV verification
+        run: dotnet run --project .\src\TimeGrapher.Verify\TimeGrapher.Verify.csproj -c Release --no-build -- --generated --byte-fixtures
+
+      - name: Restore Windows app publish
+        run: dotnet restore src/TimeGrapher.App/TimeGrapher.App.csproj -r win-x64 --locked-mode
 
       - name: Publish Windows app
         run: dotnet publish src/TimeGrapher.App/TimeGrapher.App.csproj -c Release -r win-x64 --self-contained false --no-restore -o artifacts/TimeGrapher.App-win-x64
+
+      - name: Check publish artifact
+        shell: pwsh
+        run: |
+          $out = "artifacts/TimeGrapher.App-win-x64"
+          $required = @(
+            "TimeGrapher.App.exe",
+            "TimeGrapher.App.dll",
+            "TimeGrapher.App.runtimeconfig.json",
+            "TimeGrapher.Core.dll",
+            "TimeGrapher.Platform.WindowsAudio.dll"
+          )
+          foreach ($name in $required) {
+            $path = Join-Path $out $name
+            if (-not (Test-Path $path)) {
+              throw "Missing publish artifact: $name"
+            }
+          }
+          Get-ChildItem $out -File |
+            Get-FileHash -Algorithm SHA256 |
+            Sort-Object Path |
+            ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Encoding ascii "artifacts/TimeGrapher.App-win-x64.sha256.txt"
+          & (Join-Path $out "TimeGrapher.App.exe") --smoke
+          if ($LASTEXITCODE -ne 0) {
+            throw "Published app smoke check failed with exit code $LASTEXITCODE"
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: TimeGrapher.App-win-x64
-          path: artifacts/TimeGrapher.App-win-x64
+          path: |
+            artifacts/TimeGrapher.App-win-x64
+            artifacts/TimeGrapher.App-win-x64.sha256.txt

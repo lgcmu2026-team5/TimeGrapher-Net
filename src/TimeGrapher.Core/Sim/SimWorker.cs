@@ -4,6 +4,13 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.Sim;
 
+public enum SimCompletionReason
+{
+    Completed,
+    Cancelled,
+    Failed,
+}
+
 /// <summary>
 /// Port of TSimWorker (SimWorker.h / SimWorker.cpp).
 ///
@@ -37,19 +44,12 @@ public sealed class SimWorker : IDisposable
     public event Action? DataReady; // SimDataReady
 
     /// <summary>Raised once when the sim loop finishes/stops. Raised from the sim thread.</summary>
-    public event Action? SimDone;   // SimDone
+    public event Action<SimCompletionReason>? SimDone;   // SimDone
 
     public SimWorker(MasterAudioBuffer buffer, int samplesPerSecond)
     {
         _rawAudio = buffer;
-        // Mirror the TSimWorker constructor zeroing of the shared buffer.
-        _rawAudio.TotalSamplesWritten = 0;
-        _rawAudio.WriteIndex = 0;
-        _rawAudio.AnalysisLastTotalSamplesWritten = 0; // MainThrd_LastTotalSamplesWritten
-        _rawAudio.AnalysisLastWriteIndex = 0;          // MainThrd_LastWriteIndex
-        _rawAudio.Fps = 0.0;
-        _rawAudio.Spf = 0.0;
-        _rawAudio.Sps = 0.0;
+        _rawAudio.Reset(samplesPerSecond);
         _timerStarted = false;
         _samplesPerSecond = samplesPerSecond;
         _lastTime = 0.0;
@@ -60,8 +60,13 @@ public sealed class SimWorker : IDisposable
     }
 
     /// <summary>Start the sim on a dedicated thread (StartSim slot via worker thread).</summary>
-    public void Start(WatchSynthStreamConfig cfg)
+    public bool Start(WatchSynthStreamConfig cfg)
     {
+        if (_thread?.IsAlive == true)
+        {
+            return false;
+        }
+
         _interruptionRequested = false;
         var cfgCopy = cfg.Clone(); // original receives cfg by value
         _thread = new Thread(() => StartSim(cfgCopy))
@@ -70,16 +75,29 @@ public sealed class SimWorker : IDisposable
             Name = "SimWorker"
         };
         _thread.Start();
+        return true;
     }
 
     /// <summary>Request interruption and join the sim thread (Qt quit+wait equivalent).</summary>
     public void Stop()
     {
+        _ = TryStop(Timeout.InfiniteTimeSpan);
+    }
+
+    public bool TryStop(TimeSpan timeout)
+    {
         _interruptionRequested = true;
         Thread? t = _thread;
         if (t != null && t.IsAlive)
-            t.Join();
+        {
+            bool stopped = timeout == Timeout.InfiniteTimeSpan ? JoinInfinite(t) : t.Join(timeout);
+            if (!stopped)
+            {
+                return false;
+            }
+        }
         _thread = null;
+        return true;
     }
 
     public void Dispose()
@@ -96,6 +114,7 @@ public sealed class SimWorker : IDisposable
         var events = new WatchSynthStreamEvent[16];
         WatchSynthStreamFillResult r;
         cfg.SampleRateHz = (uint)_samplesPerSecond;
+        SimCompletionReason reason = SimCompletionReason.Completed;
 
         WatchSynthStream stream;
         try
@@ -106,7 +125,7 @@ public sealed class SimWorker : IDisposable
         catch (ArgumentException ex)
         {
             Console.Error.WriteLine("init failed: " + ex.Message);
-            SimDone?.Invoke();
+            SimDone?.Invoke(SimCompletionReason.Failed);
             return;
         }
 
@@ -124,10 +143,12 @@ public sealed class SimWorker : IDisposable
             if (r.SamplesWritten != _dataInSize)
             {
                 Console.Error.WriteLine("short fill");
+                reason = SimCompletionReason.Failed;
                 break;
             }
             if (_interruptionRequested)
             {
+                reason = SimCompletionReason.Cancelled;
                 break; // Exit loop early
             }
             int numberOfSamples = r.SamplesWritten;
@@ -157,7 +178,18 @@ public sealed class SimWorker : IDisposable
             if (sleepTime < 0) sleepTime = 0;
             Thread.Sleep((int)sleepTime); // QThread::msleep(SleepTime); 0 yields the timeslice
         }
-        SimDone?.Invoke();
+        if (_interruptionRequested && reason == SimCompletionReason.Completed)
+        {
+            reason = SimCompletionReason.Cancelled;
+        }
+
+        SimDone?.Invoke(reason);
         Console.Error.WriteLine("After Finish");
+    }
+
+    private static bool JoinInfinite(Thread thread)
+    {
+        thread.Join();
+        return true;
     }
 }

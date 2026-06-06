@@ -1,0 +1,321 @@
+using ScottPlot;
+using ScottPlot.Avalonia;
+using ScottPlot.Plottables;
+using TimeGrapher.App.Tabs;
+using TimeGrapher.Core.Shared;
+
+namespace TimeGrapher.App.Rendering;
+
+public sealed class RateScopeRenderer
+{
+    private readonly AvaPlot _scopePlot;
+    private readonly AvaPlot _ratePlot;
+    private readonly string _textFontFamily;
+
+    private readonly GraphSeriesDefinition[] _scopeSeries;
+    private readonly GraphSeriesDefinition[] _rateSeries;
+
+    private readonly List<double>[] _scopeX;
+    private readonly List<double>[] _scopeY;
+    private readonly List<double>[] _rateX;
+    private readonly List<double>[] _rateY;
+
+    private sealed class TrackedLine
+    {
+        public LinePlot Plot = null!;
+    }
+
+    private sealed class TrackedText
+    {
+        public Text Plot = null!;
+    }
+
+    private readonly List<TrackedLine> _scopeLines = new();
+    private readonly List<TrackedText> _scopeTexts = new();
+
+    public RateScopeRenderer(AvaPlot scopePlot, AvaPlot ratePlot, string textFontFamily)
+    {
+        _scopePlot = scopePlot;
+        _ratePlot = ratePlot;
+        _textFontFamily = textFontFamily;
+
+        GraphSeriesDefinition[] graphSeries = InfoTabCatalog.RateScope.GraphSeries.ToArray();
+        _scopeSeries = graphSeries.Where(series => series.RenderMode == GraphSeriesRenderMode.Line).ToArray();
+        _rateSeries = graphSeries.Where(series => series.RenderMode == GraphSeriesRenderMode.Points).ToArray();
+
+        _scopeX = CreateSeriesLists(_scopeSeries.Length);
+        _scopeY = CreateSeriesLists(_scopeSeries.Length);
+        _rateX = CreateSeriesLists(_rateSeries.Length);
+        _rateY = CreateSeriesLists(_rateSeries.Length);
+    }
+
+    public void CreateGraphs(double rateErrorYScale, int rateDataPoints)
+    {
+        Plot scope = _scopePlot.Plot;
+        scope.Clear();
+        scope.YLabel("Amplitude");
+        scope.XLabel("Time");
+        scope.Axes.SetLimitsY(0, 0.1);
+        HideXTickLabels(scope);
+        ClearSeriesData(_scopeX, _scopeY);
+        AddScopePlottables();
+        scope.ShowLegend();
+
+        Plot rate = _ratePlot.Plot;
+        rate.Clear();
+        rate.YLabel("Rate Error (milliseconds)");
+        rate.XLabel("Time");
+        rate.Axes.SetLimitsY(-rateErrorYScale, rateErrorYScale);
+        rate.Axes.SetLimitsX(0, rateDataPoints);
+        HideXTickLabels(rate);
+        ClearSeriesData(_rateX, _rateY);
+        AddRatePlottables();
+        rate.ShowLegend();
+
+        _scopePlot.Refresh();
+        _ratePlot.Refresh();
+    }
+
+    public void Reset(double rateErrorYScale, int rateDataPoints)
+    {
+        Plot scope = _scopePlot.Plot;
+        scope.Clear();
+        ClearSeriesData(_scopeX, _scopeY);
+        ClearScopeMarkers();
+        AddScopePlottables();
+        _scopePlot.Refresh();
+
+        Plot rate = _ratePlot.Plot;
+        rate.Clear();
+        rate.Axes.SetLimitsY(-rateErrorYScale, rateErrorYScale);
+        rate.Axes.SetLimitsX(0, rateDataPoints);
+        ClearSeriesData(_rateX, _rateY);
+        AddRatePlottables();
+        _ratePlot.Refresh();
+    }
+
+    public void RenderFrame(AnalysisFrame frame, AnalysisTabRenderContext context)
+    {
+        bool scopeUpdated = ReplaceScopeSeries(frame);
+        bool rateUpdated = ReplaceRateSeries(frame);
+
+        if (rateUpdated)
+        {
+            _ratePlot.Refresh();
+        }
+
+        if (scopeUpdated)
+        {
+            ClearScopeMarkers();
+            AddScopeMarkers(frame);
+            double width = (double)context.SampleRate / Math.Max(1, context.ScopeScale);
+            double end = frame.GraphTickEnd;
+            _scopePlot.Plot.Axes.SetLimitsX(end - width, end);
+            _scopePlot.Plot.Axes.AutoScaleY();
+            _scopePlot.Refresh();
+        }
+    }
+
+    private bool ReplaceScopeSeries(AnalysisFrame frame)
+    {
+        bool updated = false;
+        for (int i = 0; i < _scopeSeries.Length; i++)
+        {
+            GraphSeriesFrame? series = FindSeries(frame.ScopeSeries, _scopeSeries[i].Id);
+            if (series == null)
+            {
+                continue;
+            }
+
+            updated |= SeriesDataReducer.TryReplaceSeriesData(series, _scopeX[i], _scopeY[i], _scopeSeries[i].TargetPointBudget);
+        }
+
+        return updated;
+    }
+
+    private bool ReplaceRateSeries(AnalysisFrame frame)
+    {
+        bool updated = false;
+        for (int i = 0; i < _rateSeries.Length; i++)
+        {
+            GraphSeriesFrame? series = FindSeries(frame.RateSeries, _rateSeries[i].Id);
+            if (series == null)
+            {
+                continue;
+            }
+
+            updated |= SeriesDataReducer.TryReplaceSeriesData(series, _rateX[i], _rateY[i], _rateSeries[i].TargetPointBudget);
+        }
+
+        return updated;
+    }
+
+    private void AddScopePlottables()
+    {
+        Plot scope = _scopePlot.Plot;
+        for (int i = 0; i < _scopeSeries.Length; i++)
+        {
+            GraphSeriesDefinition spec = _scopeSeries[i];
+            Scatter sc = scope.Add.Scatter(_scopeX[i], _scopeY[i]);
+            sc.LineWidth = 1;
+            sc.LineColor = Color.FromARGB(spec.Color);
+            sc.MarkerStyle.IsVisible = false;
+            if (spec.FillAlpha > 0)
+            {
+                sc.FillY = true;
+                sc.FillYColor = Color.FromARGB(spec.Color).WithAlpha((byte)spec.FillAlpha);
+            }
+            sc.LegendText = spec.Name;
+        }
+    }
+
+    private void AddRatePlottables()
+    {
+        Plot rate = _ratePlot.Plot;
+        for (int i = 0; i < _rateSeries.Length; i++)
+        {
+            GraphSeriesDefinition spec = _rateSeries[i];
+            Scatter sc = rate.Add.Scatter(_rateX[i], _rateY[i]);
+            sc.LineWidth = 0;
+            sc.MarkerShape = MarkerShape.FilledCircle;
+            sc.MarkerSize = 3;
+            sc.MarkerColor = Color.FromARGB(spec.Color);
+            sc.LegendText = spec.Name;
+        }
+    }
+
+    private static List<double>[] CreateSeriesLists(int count)
+    {
+        var lists = new List<double>[count];
+        for (int i = 0; i < count; i++)
+        {
+            lists[i] = new List<double>();
+        }
+
+        return lists;
+    }
+
+    private static void ClearSeriesData(List<double>[] xs, List<double>[] ys)
+    {
+        for (int i = 0; i < xs.Length; i++)
+        {
+            xs[i].Clear();
+            ys[i].Clear();
+        }
+    }
+
+    private static GraphSeriesFrame? FindSeries(List<GraphSeriesFrame> seriesList, string id)
+    {
+        foreach (GraphSeriesFrame series in seriesList)
+        {
+            if (series.Id == id)
+            {
+                return series;
+            }
+        }
+
+        return null;
+    }
+
+    private static void HideXTickLabels(Plot plot)
+    {
+        plot.Axes.Bottom.TickLabelStyle.IsVisible = false;
+    }
+
+    private void ClearScopeMarkers()
+    {
+        Plot scope = _scopePlot.Plot;
+        foreach (TrackedLine line in _scopeLines)
+        {
+            scope.Remove(line.Plot);
+        }
+        _scopeLines.Clear();
+
+        foreach (TrackedText text in _scopeTexts)
+        {
+            scope.Remove(text.Plot);
+        }
+        _scopeTexts.Clear();
+    }
+
+    private void AddScopeMarkers(AnalysisFrame frame)
+    {
+        foreach (ScopeVerticalMarker marker in frame.VerticalMarkers)
+        {
+            AddVerticalMarker(marker.X, marker.Height, marker.Color);
+        }
+
+        foreach (ScopeHorizontalMarker marker in frame.HorizontalMarkers)
+        {
+            if (marker.Direction == HorizontalMarkerDirection.Inward)
+            {
+                AddHorizontalMarkerInward(marker.XLeft, marker.XRight, marker.Length, marker.Height, marker.Color);
+            }
+            else
+            {
+                AddHorizontalMarkerOutward(marker.XLeft, marker.XRight, marker.Height, marker.Color);
+            }
+        }
+
+        foreach (ScopeTextMarker marker in frame.TextMarkers)
+        {
+            AddText(marker.X, marker.Height, marker.Text, marker.Color, marker.Alignment);
+        }
+    }
+
+    private void AddVerticalMarker(double x, double height, uint color)
+    {
+        LinePlot line = _scopePlot.Plot.Add.Line(x, 0.0, x, height);
+        line.LineColor = Color.FromARGB(color);
+        line.LineWidth = 2;
+        line.LinePattern = LinePattern.Dashed;
+        line.MarkerStyle.IsVisible = false;
+        _scopeLines.Add(new TrackedLine { Plot = line });
+    }
+
+    private void AddText(double x, double height, string text, uint color, MarkerTextAlignment alignment)
+    {
+        Text label = _scopePlot.Plot.Add.Text(text, x, height);
+        label.LabelFontColor = Color.FromARGB(color);
+        label.LabelFontName = _textFontFamily;
+        label.LabelFontSize = 10;
+        label.Alignment = MapAlignment(alignment);
+        _scopeTexts.Add(new TrackedText { Plot = label });
+    }
+
+    private static Alignment MapAlignment(MarkerTextAlignment alignment) => alignment switch
+    {
+        MarkerTextAlignment.CenterTop => Alignment.UpperCenter,
+        MarkerTextAlignment.LeftTop => Alignment.UpperLeft,
+        _ => Alignment.UpperLeft,
+    };
+
+    private void AddHorizontalMarkerInward(double xLeft, double xRight, double length, double height, uint color)
+    {
+        Color c = Color.FromARGB(color);
+
+        LinePlot left = _scopePlot.Plot.Add.Line(xLeft - length, height, xLeft, height);
+        left.LineColor = c;
+        left.LineWidth = 1;
+        left.LinePattern = LinePattern.Solid;
+        left.MarkerStyle.IsVisible = false;
+        _scopeLines.Add(new TrackedLine { Plot = left });
+
+        LinePlot right = _scopePlot.Plot.Add.Line(xRight, height, xRight + length, height);
+        right.LineColor = c;
+        right.LineWidth = 1;
+        right.LinePattern = LinePattern.Solid;
+        right.MarkerStyle.IsVisible = false;
+        _scopeLines.Add(new TrackedLine { Plot = right });
+    }
+
+    private void AddHorizontalMarkerOutward(double xLeft, double xRight, double height, uint color)
+    {
+        LinePlot line = _scopePlot.Plot.Add.Line(xLeft, height, xRight, height);
+        line.LineColor = Color.FromARGB(color);
+        line.LineWidth = 1;
+        line.LinePattern = LinePattern.Solid;
+        line.MarkerStyle.IsVisible = false;
+        _scopeLines.Add(new TrackedLine { Plot = line });
+    }
+}

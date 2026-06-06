@@ -6,11 +6,18 @@ using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.AudioIo;
 
+public enum PlaybackCompletionReason
+{
+    Eof,
+    Cancelled,
+    Failed,
+}
+
 /// <summary>
 /// WAV file playback worker. Port of TPlaybackWorker (PlaybackWorker.cpp). Streams a
 /// 32-bit float mono WAV in fixed-size blocks with real-time pacing, ring-writing into
 /// the shared <see cref="MasterAudioBuffer"/>. Raises <see cref="DataReady"/> per block
-/// and <see cref="DoneReadingFile"/> once when the file finishes (not on cancel).
+/// and <see cref="DoneReadingFile"/> once when the file finishes, is cancelled, or fails.
 /// Runs on a dedicated thread; <see cref="Stop"/> requests interruption and joins.
 /// </summary>
 public sealed class PlaybackWorker : IDisposable
@@ -43,19 +50,13 @@ public sealed class PlaybackWorker : IDisposable
     /// <summary>Raised on the playback thread after each block is written.</summary>
     public event Action? DataReady;
 
-    /// <summary>Raised on the playback thread once when end-of-file is reached (not on cancel).</summary>
-    public event Action? DoneReadingFile;
+    /// <summary>Raised on the playback thread once when playback finishes.</summary>
+    public event Action<PlaybackCompletionReason>? DoneReadingFile;
 
     public PlaybackWorker(MasterAudioBuffer buffer, int samplesPerSecond)
     {
         _rawAudio = buffer;
-        _rawAudio.TotalSamplesWritten = 0;
-        _rawAudio.WriteIndex = 0;
-        _rawAudio.AnalysisLastTotalSamplesWritten = 0;
-        _rawAudio.AnalysisLastWriteIndex = 0;
-        _rawAudio.Fps = 0.0;
-        _rawAudio.Spf = 0.0;
-        _rawAudio.Sps = 0.0;
+        _rawAudio.Reset(samplesPerSecond);
         _timerStarted = false;
         _samplesPerSecond = samplesPerSecond;
         _lastTime = 0.0;
@@ -69,8 +70,13 @@ public sealed class PlaybackWorker : IDisposable
     }
 
     /// <summary>Starts playback on a dedicated thread (real-time paced, same as the original).</summary>
-    public void Start(string fileName)
+    public bool Start(string fileName)
     {
+        if (_thread?.IsAlive == true)
+        {
+            return false;
+        }
+
         _interruptionRequested = false;
         _thread = new Thread(() => Run(fileName))
         {
@@ -78,18 +84,29 @@ public sealed class PlaybackWorker : IDisposable
             Priority = ThreadPriority.Highest // matches QThread::TimeCriticalPriority intent
         };
         _thread.Start();
+        return true;
     }
 
     /// <summary>Requests cancellation and joins the playback thread.</summary>
     public void Stop()
     {
+        _ = TryStop(Timeout.InfiniteTimeSpan);
+    }
+
+    public bool TryStop(TimeSpan timeout)
+    {
         _interruptionRequested = true;
         var t = _thread;
         if (t != null && t.IsAlive)
         {
-            t.Join();
+            bool stopped = timeout == Timeout.InfiniteTimeSpan ? JoinInfinite(t) : t.Join(timeout);
+            if (!stopped)
+            {
+                return false;
+            }
         }
         _thread = null;
+        return true;
     }
 
     public void Dispose()
@@ -100,6 +117,8 @@ public sealed class PlaybackWorker : IDisposable
     // ── Playback loop (PlaybackWorker.cpp::StartPlayback) ──────────────────────
     private void Run(string fileName)
     {
+        PlaybackCompletionReason reason = PlaybackCompletionReason.Eof;
+
         if (!_timerStarted)
         {
             _timerStarted = true;
@@ -108,7 +127,15 @@ public sealed class PlaybackWorker : IDisposable
 
         if (!File.Exists(fileName))
         {
-            DoneReadingFile?.Invoke();
+            DoneReadingFile?.Invoke(PlaybackCompletionReason.Failed);
+            return;
+        }
+
+        if (!WavProbe.TryReadFormat(fileName, out WavFormatInfo format, out _) ||
+            format.SampleRate != _samplesPerSecond ||
+            !WavProbe.IsAccepted(format, WavAcceptanceProfile.PlaybackFloatMonoStandardRates))
+        {
+            DoneReadingFile?.Invoke(PlaybackCompletionReason.Failed);
             return;
         }
 
@@ -119,80 +146,44 @@ public sealed class PlaybackWorker : IDisposable
         }
         catch
         {
-            DoneReadingFile?.Invoke();
+            DoneReadingFile?.Invoke(PlaybackCompletionReason.Failed);
             return;
         }
 
         using (file)
         {
-            // ── Parse WAV header (WAV is little-endian) ──
-            var header = new WaveHeader();
-            var br = new BinaryReader(file);
+            file.Position = format.DataOffset;
+            long dataEnd = format.DataOffset + format.DataSize;
 
-            header.RiffId = ReadFourCc(file);
-            header.FileSize = br.ReadUInt32();
-            header.WaveId = ReadFourCc(file);
-            header.FmtId = ReadFourCc(file);
-            header.FmtSize = br.ReadUInt32();
-            header.AudioFormat = br.ReadUInt16();
-            header.NumChannels = br.ReadUInt16();
-            header.SampleRate = br.ReadUInt32();
-            header.ByteRate = br.ReadUInt32();
-            header.BlockAlign = br.ReadUInt16();
-            header.BitsPerSample = br.ReadUInt16();
+            int numSamples = (int)((dataEnd - format.DataOffset) / sizeof(float));
 
-            // Skip any extra fmt bytes if fmtSize > 16.
-            if (header.FmtSize > 16)
-                file.Seek((header.FmtSize - 16), SeekOrigin.Current);
-
-            // Look for "data" chunk (it might not be immediately after fmt).
-            while (file.Position < file.Length)
-            {
-                string chunkId = ReadFourCc(file);
-                if (file.Position + 4 > file.Length) break;
-                uint chunkSize = br.ReadUInt32();
-                if (chunkId == "data")
-                {
-                    header.DataSize = chunkSize;
-                    break;
-                }
-                file.Seek(chunkSize, SeekOrigin.Current);
-            }
-
-            if (header.RiffId != "RIFF" || (header.SampleRate != _samplesPerSecond) ||
-                (header.NumChannels != 1) || (header.BitsPerSample != 32) ||
-                (header.AudioFormat != 3))
-            {
-                // Original emits PlaybackDoneReadingFile twice here; once is sufficient
-                // for the C# event contract (single notification on completion path).
-                DoneReadingFile?.Invoke();
-                return;
-            }
-
-            int numSamples = (int)(header.DataSize / sizeof(float));
-
-            while ((file.Position < file.Length) && (numSamples > 0))
+            while ((file.Position < dataEnd) && (numSamples > 0))
             {
                 long start = _timer.ElapsedMilliseconds;
 
-                int bytesIn = file.Read(_dataIn, 0, _dataInSize);
+                int bytesToRead = (int)Math.Min(_dataInSize, dataEnd - file.Position);
+                int bytesIn = file.Read(_dataIn, 0, bytesToRead);
                 if (bytesIn < 0)
                 {
                     Console.Error.WriteLine("Read Error =" + bytesIn);
+                    reason = PlaybackCompletionReason.Failed;
                     break;
                 }
                 else if ((bytesIn % 4) != 0)
                 {
                     Console.Error.WriteLine("Read Error not Modulus of 4");
+                    reason = PlaybackCompletionReason.Failed;
                     break;
                 }
                 else if (bytesIn == 0)
                 {
                     Console.Error.WriteLine("Read Error 0");
+                    reason = PlaybackCompletionReason.Failed;
                     break;
                 }
                 else if (_interruptionRequested)
                 {
+                    reason = PlaybackCompletionReason.Cancelled;
                     break; // Exit loop early
                 }
 
@@ -234,31 +225,17 @@ public sealed class PlaybackWorker : IDisposable
             }
         }
 
-        DoneReadingFile?.Invoke();
+        if (_interruptionRequested && reason == PlaybackCompletionReason.Eof)
+        {
+            reason = PlaybackCompletionReason.Cancelled;
+        }
+
+        DoneReadingFile?.Invoke(reason);
     }
 
-    private static string ReadFourCc(FileStream file)
+    private static bool JoinInfinite(Thread thread)
     {
-        Span<byte> b = stackalloc byte[4];
-        int n = file.Read(b);
-        if (n < 4) return string.Empty;
-        return new string(new[] { (char)b[0], (char)b[1], (char)b[2], (char)b[3] });
-    }
-
-    // Port of TWaveHeader (WaveHeader.h).
-    private sealed class WaveHeader
-    {
-        public string RiffId = "";       // "RIFF"
-        public uint FileSize;            // Size of file - 8 bytes
-        public string WaveId = "";       // "WAVE"
-        public string FmtId = "";        // "fmt "
-        public uint FmtSize;             // Usually 16 for PCM
-        public ushort AudioFormat;       // 1 for PCM, 3 for IEEE Float
-        public ushort NumChannels;
-        public uint SampleRate;
-        public uint ByteRate;
-        public ushort BlockAlign;
-        public ushort BitsPerSample;     // 32 for float
-        public uint DataSize;
+        thread.Join();
+        return true;
     }
 }

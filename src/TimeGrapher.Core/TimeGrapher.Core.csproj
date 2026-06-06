@@ -6,10 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TimeGrapher.Core</RootNamespace>
     <AssemblyName>TimeGrapher.Core</AssemblyName>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="NAudio" />
-  </ItemGroup>
 
 </Project>

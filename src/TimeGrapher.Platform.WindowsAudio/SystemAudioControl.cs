@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using NAudio.CoreAudioApi;
 
-namespace TimeGrapher.Core.AudioIo;
+namespace TimeGrapher.Platform.WindowsAudio;
 
 /// <summary>
 /// System (endpoint) audio control. Port of WindowsAudio.cpp's WindowsSetSoundParameters /

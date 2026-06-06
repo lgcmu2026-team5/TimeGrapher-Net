@@ -18,19 +18,27 @@ dotnet run --project src/TimeGrapher.Verify -c Release -- D:\TimeGrapher_Refacto
 
 | 프로젝트 | 내용 |
 |---|---|
-| `TimeGrapher.Core` | UI 무관 로직 전부 — 검출 코어(tg_* 포트), 메트릭, 사운드 이미지 렌더러, 오디오 I/O(NAudio), 시뮬레이터, 분석 워커 |
-| `TimeGrapher.App` | Avalonia 11.3 UI — MainWindow, GraphFrameRenderer(ScottPlot 5) |
+| `TimeGrapher.Core` | UI/플랫폼 무관 로직 — 검출 코어(tg_* 포트), 메트릭, 사운드 이미지 렌더러, WAV reader/writer, 시뮬레이터, 분석 워커 |
+| `TimeGrapher.App` | Avalonia 11.3 UI — MainWindow, 정보 tab catalog/router, ScottPlot 렌더러 |
+| `TimeGrapher.Platform.WindowsAudio` | Windows live audio backend — NAudio WaveInEvent capture, Windows endpoint volume helpers |
 | `TimeGrapher.Verify` | 헤드리스 검증 콘솔 — 샘플 WAV의 파일명 BPH와 검출 BPH 비교, 전부 일치 시 exit 0 |
 | `TimeGrapher.Core.Tests` | xUnit 회귀 테스트 — 합성 시계 신호 검출, WAV writer/reader round-trip |
+| `TimeGrapher.App.Tests` | tab catalog/router, 렌더링 data contract, UI payload 축소 회귀 테스트 |
 
-기술 매핑: Qt Widgets→Avalonia, QCustomPlot→ScottPlot.Avalonia, Qt Multimedia→NAudio
-(WaveInEvent), QImage→PixelBuffer(ARGB32)→WriteableBitmap, QThread/signal→전용 Thread +
-AutoResetEvent + `Dispatcher.UIThread.Post`. WPF 미사용.
+기술 매핑: Qt Widgets→Avalonia, QCustomPlot→ScottPlot.Avalonia, Qt Multimedia→플랫폼별
+audio backend(현재 Windows는 NAudio WaveInEvent), QImage→PixelBuffer(ARGB32)→WriteableBitmap,
+QThread/signal→전용 Thread + AutoResetEvent + `Dispatcher.UIThread.Post`. WPF 미사용.
 
-포팅 계약·모듈 경계·스레딩 규칙은 [`PORTING.md`](PORTING.md) 참조.
+Core는 WindowsAudio/NAudio를 참조하지 않는다. Raspberry Pi/Linux live audio는 별도 platform
+backend를 추가하는 방식으로 구현한다.
 
 패키지 버전은 `Directory.Packages.props`에서 중앙 관리하고 `packages.lock.json`을 커밋한다.
-CI는 `dotnet restore --locked-mode`, Release build, test, Windows publish를 수행한다.
+CI는 `dotnet restore --locked-mode`, Release build, test, generated/edge WAV verifier,
+Windows publish와 publish smoke를 수행한다.
+
+Windows publish artifact는 현재 framework-dependent(`--self-contained false`)이다. 실행 환경에는
+.NET 8 Desktop Runtime이 필요하다. 외부 배포용으로 런타임 설치 전제를 없애려면 self-contained
+publish artifact를 별도로 만든다.
 
 ## 검증 상태 (2026-06-04)
 

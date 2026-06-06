@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using NAudio.Wave;
 using TimeGrapher.Core.Shared;
 
-namespace TimeGrapher.Core.AudioIo;
+namespace TimeGrapher.Platform.WindowsAudio;
 
 /// <summary>
 /// Live audio capture worker. Port of TAudioWorker (AudioWorker.cpp) using NAudio's
@@ -35,14 +36,7 @@ public sealed class AudioCaptureWorker : IDisposable
     public AudioCaptureWorker(MasterAudioBuffer buffer)
     {
         _rawAudio = buffer;
-        // Match the constructor reset of the original TAudioWorker.
-        _rawAudio.TotalSamplesWritten = 0;
-        _rawAudio.WriteIndex = 0;
-        _rawAudio.AnalysisLastTotalSamplesWritten = 0;
-        _rawAudio.AnalysisLastWriteIndex = 0;
-        _rawAudio.Fps = 0.0;
-        _rawAudio.Spf = 0.0;
-        _rawAudio.Sps = 0.0;
+        _rawAudio.Reset();
         _timerStarted = false;
         _lastTime = 0.0;
         _frameCount = 0;
@@ -136,14 +130,56 @@ public sealed class AudioCaptureWorker : IDisposable
     /// <summary>Stops recording and tears down the device. (StopAudioRecording)</summary>
     public void Stop()
     {
-        if (_audioInput != null)
+        _ = TryStop(Timeout.InfiniteTimeSpan);
+    }
+
+    public bool TryStop(TimeSpan timeout)
+    {
+        WaveInEvent? audioInput = Interlocked.Exchange(ref _audioInput, null);
+        if (audioInput == null)
         {
-            // Detach the callback first so no further DataReady fires after Stop().
-            _audioInput.DataAvailable -= OnDataAvailable;
-            _audioInput.StopRecording();
-            _audioInput.Dispose();
-            _audioInput = null;
+            return true;
         }
+
+        // Detach the callback first so no further DataReady fires after Stop().
+        audioInput.DataAvailable -= OnDataAvailable;
+
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            StopAndDispose(audioInput);
+            return true;
+        }
+
+        Exception? error = null;
+        var stopThread = new Thread(() =>
+        {
+            try
+            {
+                StopAndDispose(audioInput);
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+        })
+        {
+            Name = "AudioCaptureStop",
+            IsBackground = true,
+        };
+        stopThread.Start();
+
+        if (!stopThread.Join(timeout))
+        {
+            return false;
+        }
+
+        if (error != null)
+        {
+            Console.Error.WriteLine("AudioCaptureWorker: stop failed: " + error.Message);
+            return false;
+        }
+
+        return true;
     }
 
     public void Dispose()
@@ -177,4 +213,10 @@ public sealed class AudioCaptureWorker : IDisposable
 
     [Obsolete("Use GetCandidateSampleRates; live capture support is validated by Start().")]
     public static IReadOnlyList<int> GetSupportedSampleRates(int deviceNumber) => GetCandidateSampleRates(deviceNumber);
+
+    private static void StopAndDispose(WaveInEvent audioInput)
+    {
+        audioInput.StopRecording();
+        audioInput.Dispose();
+    }
 }

@@ -59,7 +59,7 @@ public sealed class GraphSeriesFrame
     public string Id = "";
     public List<double> X = new();
     public List<double> Y = new();
-    /// <summary>false = append to rolling plot (scope), true = replace plot data (rate).</summary>
+    /// <summary>true = replace the previous UI graph payload for this series.</summary>
     public bool Replace;
 }
 
@@ -85,13 +85,13 @@ public sealed class AnalysisFrame
     public ulong SourceSampleEnd;
     public bool InputOverrun;
     public ulong InputSamplesDropped;
+    public ulong PendingSamples;
+    public ulong AnalysisLagSamples;
+    public double ProcessingElapsedMs;
 
     public List<GraphSeriesFrame> ScopeSeries = new();
     public List<GraphSeriesFrame> RateSeries = new();
 
-    public List<double> ScopeX = new();
-    public List<double> ScopePcm = new();
-    public List<double> ScopeThreshold = new();
     public List<ScopeVerticalMarker> VerticalMarkers = new();
     public List<ScopeHorizontalMarker> HorizontalMarkers = new();
     public List<ScopeTextMarker> TextMarkers = new();

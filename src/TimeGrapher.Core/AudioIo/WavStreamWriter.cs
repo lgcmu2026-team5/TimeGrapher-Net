@@ -4,6 +4,12 @@ using System.Runtime.InteropServices;
 
 namespace TimeGrapher.Core.AudioIo;
 
+public interface ISampleWriter : IDisposable
+{
+    bool Write(ReadOnlySpan<float> samples);
+    bool Close();
+}
+
 /// <summary>
 /// Streams 32-bit IEEE float PCM data to a WAV file incrementally.
 /// Port of the Qt WavStreamWriter: writes a 44-byte placeholder header on Open(),
@@ -15,12 +21,13 @@ namespace TimeGrapher.Core.AudioIo;
 ///   writer.Write(buffer);   // call as many times as needed
 ///   writer.Close();         // patches the header with final sizes
 /// </summary>
-public sealed class WavStreamWriter : IDisposable
+public sealed class WavStreamWriter : ISampleWriter
 {
     // WAV format constants.
     private const ushort KFmtIeeeFloat = 3;     // WAVE_FORMAT_IEEE_FLOAT
     private const ushort KBitsPerSample = 32;   // 32-bit float
     private const int KHeaderSize = 44;         // bytes in a standard WAV header
+    private const ulong MaxDataBytes = uint.MaxValue - (ulong)(KHeaderSize - 8);
 
     private FileStream? _file;
 
@@ -91,6 +98,13 @@ public sealed class WavStreamWriter : IDisposable
         if (samples.Length <= 0)
             return true; // nothing to do, not an error
 
+        ulong bytesToWrite = (ulong)samples.Length * sizeof(float);
+        if (_bytesWritten + bytesToWrite > MaxDataBytes)
+        {
+            Console.Error.WriteLine("WavStreamWriter: WAV file would exceed RIFF 32-bit size limit");
+            return false;
+        }
+
         try
         {
             if (BitConverter.IsLittleEndian)
@@ -118,7 +132,7 @@ public sealed class WavStreamWriter : IDisposable
             return false;
         }
 
-        _bytesWritten += (ulong)samples.Length * sizeof(float);
+        _bytesWritten += bytesToWrite;
         return true;
     }
 
@@ -203,8 +217,13 @@ public sealed class WavStreamWriter : IDisposable
     {
         if (_file == null) return false;
 
+        if (_bytesWritten > MaxDataBytes)
+        {
+            return false;
+        }
+
         uint dataSize = (uint)_bytesWritten;
-        uint chunkSize = (uint)((KHeaderSize - 8) + (long)_bytesWritten);
+        uint chunkSize = (uint)((KHeaderSize - 8) + _bytesWritten);
 
         try
         {

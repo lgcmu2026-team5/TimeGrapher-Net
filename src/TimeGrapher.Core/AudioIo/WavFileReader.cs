@@ -13,98 +13,45 @@ public sealed class WavData
 }
 
 /// <summary>
-/// Minimal RIFF/WAVE reader. Supports PCM 16/24/32-bit integer and 32-bit IEEE float.
-/// Chunk-walks the file looking for "fmt " and "data" (mirrors PlaybackWorker's chunk scan).
+/// Minimal RIFF/WAVE reader. Supports PCM 16/24/32-bit integer and IEEE float.
+/// Format probing is delegated to <see cref="WavProbe"/> so playback and verification
+/// share the same chunk-walking and acceptance logic.
 /// Throws on failure.
 /// </summary>
 public static class WavFileReader
 {
     private const ushort WaveFormatPcm = 1;        // PCM
     private const ushort WaveFormatIeeeFloat = 3;  // IEEE float
-    private const ushort WaveFormatExtensible = 0xFFFE;
 
-    public static WavData ReadMonoFloat(string filePath)
+    public static WavData ReadMonoFloat(string filePath, WavAcceptanceProfile? acceptanceProfile = null)
     {
-        byte[] bytes = File.ReadAllBytes(filePath);
-
-        if (bytes.Length < 12)
-            throw new InvalidDataException("WavFileReader: file too small to be a WAV");
-
-        // RIFF header.
-        if (bytes[0] != (byte)'R' || bytes[1] != (byte)'I' || bytes[2] != (byte)'F' || bytes[3] != (byte)'F')
-            throw new InvalidDataException("WavFileReader: missing RIFF id");
-        if (bytes[8] != (byte)'W' || bytes[9] != (byte)'A' || bytes[10] != (byte)'V' || bytes[11] != (byte)'E')
-            throw new InvalidDataException("WavFileReader: missing WAVE id");
-
-        ushort audioFormat = 0;
-        ushort numChannels = 0;
-        uint sampleRate = 0;
-        ushort bitsPerSample = 0;
-        bool haveFmt = false;
-
-        int dataOffset = -1;
-        uint dataSize = 0;
-
-        // Walk chunks starting right after "WAVE" (offset 12).
-        int pos = 12;
-        while (pos + 8 <= bytes.Length)
+        if (!WavProbe.TryReadFormat(filePath, out WavFormatInfo formatInfo, out string error))
         {
-            uint chunkId = ReadU32(bytes, pos);
-            uint chunkSize = ReadU32Le(bytes, pos + 4);
-            int chunkDataStart = pos + 8;
-
-            // "fmt " = 0x666d7420, "data" = 0x64617461 (big-endian id read for comparison).
-            if (chunkId == 0x666d7420u) // "fmt "
-            {
-                if (chunkDataStart + 16 > bytes.Length)
-                    throw new InvalidDataException("WavFileReader: truncated fmt chunk");
-
-                audioFormat = ReadU16Le(bytes, chunkDataStart + 0);
-                numChannels = ReadU16Le(bytes, chunkDataStart + 2);
-                sampleRate = ReadU32Le(bytes, chunkDataStart + 4);
-                // byteRate @ +8, blockAlign @ +12
-                bitsPerSample = ReadU16Le(bytes, chunkDataStart + 14);
-
-                // WAVE_FORMAT_EXTENSIBLE: real format is in the SubFormat GUID's first 2 bytes.
-                if (audioFormat == WaveFormatExtensible && chunkSize >= 40 &&
-                    chunkDataStart + 26 <= bytes.Length)
-                {
-                    // cbSize @ +16, then 22-byte extension; SubFormat GUID starts @ +24.
-                    audioFormat = ReadU16Le(bytes, chunkDataStart + 24);
-                }
-                haveFmt = true;
-            }
-            else if (chunkId == 0x64617461u) // "data"
-            {
-                dataOffset = chunkDataStart;
-                dataSize = chunkSize;
-                if (dataOffset + (long)dataSize > bytes.Length)
-                    dataSize = (uint)(bytes.Length - dataOffset);
-                break;
-            }
-
-            // Chunks are word-aligned: advance by chunkSize (+1 pad if odd).
-            long advance = 8L + chunkSize + (chunkSize & 1);
-            if (advance <= 0) break;
-            pos += (int)advance;
+            throw new InvalidDataException("WavFileReader: " + error);
         }
 
-        if (!haveFmt)
-            throw new InvalidDataException("WavFileReader: no fmt chunk found");
-        if (dataOffset < 0)
-            throw new InvalidDataException("WavFileReader: no data chunk found");
-        if (numChannels == 0)
+        if (acceptanceProfile != null && !WavProbe.IsAccepted(formatInfo, acceptanceProfile))
+        {
+            throw new InvalidDataException("WavFileReader: WAV format rejected by acceptance profile");
+        }
+
+        if (formatInfo.NumChannels == 0)
             throw new InvalidDataException("WavFileReader: zero channels");
 
-        int channels = numChannels;
-        int bytesPerSample = bitsPerSample / 8;
+        int channels = formatInfo.NumChannels;
+        int bytesPerSample = formatInfo.BytesPerSample;
         if (bytesPerSample <= 0)
             throw new InvalidDataException("WavFileReader: invalid bitsPerSample");
 
-        int frameStride = bytesPerSample * channels;
+        int frameStride = formatInfo.BlockAlign > 0 ? formatInfo.BlockAlign : bytesPerSample * channels;
         if (frameStride <= 0)
             throw new InvalidDataException("WavFileReader: invalid frame stride");
 
+        byte[] bytes = File.ReadAllBytes(filePath);
+        long dataOffsetLong = formatInfo.DataOffset;
+        long dataEnd = formatInfo.DataOffset + formatInfo.DataSize;
+        int dataOffset = checked((int)dataOffsetLong);
+        uint dataSize = (uint)Math.Max(0, dataEnd - dataOffsetLong);
         int frameCount = (int)(dataSize / (uint)frameStride);
         var samples = new float[frameCount];
 
@@ -112,21 +59,21 @@ public static class WavFileReader
         for (int f = 0; f < frameCount; f++)
         {
             int s = dataOffset + f * frameStride; // start of channel 0 in this frame
-            samples[f] = audioFormat switch
+            samples[f] = formatInfo.AudioFormat switch
             {
-                WaveFormatIeeeFloat when bitsPerSample == 32 => BitConverter.Int32BitsToSingle(
+                WaveFormatIeeeFloat when formatInfo.BitsPerSample == 32 => BitConverter.Int32BitsToSingle(
                     (int)ReadU32Le(bytes, s)),
-                WaveFormatIeeeFloat when bitsPerSample == 64 => (float)BitConverter.Int64BitsToDouble(
+                WaveFormatIeeeFloat when formatInfo.BitsPerSample == 64 => (float)BitConverter.Int64BitsToDouble(
                     (long)ReadU64Le(bytes, s)),
-                WaveFormatPcm when bitsPerSample == 16 => DecodePcm16(bytes, s),
-                WaveFormatPcm when bitsPerSample == 24 => DecodePcm24(bytes, s),
-                WaveFormatPcm when bitsPerSample == 32 => DecodePcm32(bytes, s),
+                WaveFormatPcm when formatInfo.BitsPerSample == 16 => DecodePcm16(bytes, s),
+                WaveFormatPcm when formatInfo.BitsPerSample == 24 => DecodePcm24(bytes, s),
+                WaveFormatPcm when formatInfo.BitsPerSample == 32 => DecodePcm32(bytes, s),
                 _ => throw new InvalidDataException(
-                    $"WavFileReader: unsupported format (audioFormat={audioFormat}, bits={bitsPerSample})")
+                    $"WavFileReader: unsupported format (audioFormat={formatInfo.AudioFormat}, bits={formatInfo.BitsPerSample})")
             };
         }
 
-        return new WavData { SampleRate = (int)sampleRate, Samples = samples };
+        return new WavData { SampleRate = formatInfo.SampleRate, Samples = samples };
     }
 
     private static float DecodePcm16(byte[] b, int o)
@@ -148,10 +95,6 @@ public static class WavFileReader
         int v = (int)ReadU32Le(b, o);
         return v / 2147483648.0f;
     }
-
-    // Big-endian 4-byte read used only for FourCC comparison.
-    private static uint ReadU32(byte[] b, int o)
-        => ((uint)b[o] << 24) | ((uint)b[o + 1] << 16) | ((uint)b[o + 2] << 8) | b[o + 3];
 
     private static ushort ReadU16Le(byte[] b, int o)
         => (ushort)(b[o] | (b[o + 1] << 8));
