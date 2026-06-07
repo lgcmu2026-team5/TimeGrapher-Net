@@ -43,6 +43,58 @@ public sealed class AnalysisFrameRenderSchedulerTests
     }
 
     [Fact]
+    public void EnqueueMergesTransientSignalsFromDisplacedFrames()
+    {
+        var harness = new SchedulerHarness();
+        var soundImage = new PixelBuffer(4, 4);
+
+        harness.Scheduler.Enqueue(new AnalysisFrame
+        {
+            SourceId = 1,
+            InputOverrun = true,
+            InputSamplesDropped = 100,
+            SoundImage = soundImage,
+            SoundImageUpdated = true,
+        });
+        harness.Scheduler.Enqueue(new AnalysisFrame { SourceId = 2, InputSamplesDropped = 5 });
+        harness.RunNextPostedAction();
+
+        Assert.Collection(
+            harness.Rendered,
+            rendered =>
+            {
+                Assert.Equal<ulong>(2, rendered.Frame.SourceId);
+                Assert.True(rendered.Frame.InputOverrun);
+                Assert.Equal<ulong>(105, rendered.Frame.InputSamplesDropped);
+                Assert.True(rendered.Frame.SoundImageUpdated);
+                Assert.Same(soundImage, rendered.Frame.SoundImage);
+            });
+    }
+
+    [Fact]
+    public void EnqueueKeepsReplacementSoundImageWhenBothFramesUpdated()
+    {
+        var harness = new SchedulerHarness();
+        var newerImage = new PixelBuffer(4, 4);
+
+        harness.Scheduler.Enqueue(new AnalysisFrame
+        {
+            SourceId = 1,
+            SoundImage = new PixelBuffer(4, 4),
+            SoundImageUpdated = true,
+        });
+        harness.Scheduler.Enqueue(new AnalysisFrame
+        {
+            SourceId = 2,
+            SoundImage = newerImage,
+            SoundImageUpdated = true,
+        });
+        harness.RunNextPostedAction();
+
+        Assert.Same(newerImage, harness.Rendered.Single().Frame.SoundImage);
+    }
+
+    [Fact]
     public void ResetInvalidatesQueuedRender()
     {
         var harness = new SchedulerHarness();

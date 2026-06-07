@@ -14,6 +14,10 @@ internal sealed class SoundPrintRenderer
 
     public void Reset()
     {
+        // Always drop the previous run's image — with the tab hidden the bounds are
+        // zero and the blank repaint below is skipped, which would leave stale data.
+        _soundImage.Source = null;
+
         int w = (int)_soundImage.Bounds.Width;
         int h = (int)_soundImage.Bounds.Height;
         if (w > 0 && h > 0)

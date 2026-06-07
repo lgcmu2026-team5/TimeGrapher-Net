@@ -126,6 +126,8 @@ public sealed class AnalysisFrame
     public ulong SessionId;
     public ulong SourceId;
     public ulong SourceSampleEnd;
+    /// <summary>Sample rate the producing analysis run was configured with (0 = unknown).</summary>
+    public int SampleRate;
     public bool InputOverrun;
     public ulong InputSamplesDropped;
     public ulong PendingSamples;

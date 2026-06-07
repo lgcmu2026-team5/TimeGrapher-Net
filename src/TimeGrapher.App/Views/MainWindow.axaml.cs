@@ -273,7 +273,7 @@ public partial class MainWindow : Window
 
         mLastAnalysisFrame = frame;
         mGraphFrameRenderer.UpdateResults(frame);
-        mFrameRouter.Route(frame, ActiveInfoTabId(), BuildTabRenderContext());
+        mFrameRouter.Route(frame, ActiveInfoTabId(), BuildTabRenderContext(frame));
 
         bool statusUpdated = false;
         if ((mBackgroundLastFPS != frame.BackgroundFps) ||
@@ -313,9 +313,9 @@ public partial class MainWindow : Window
                                     frame.InputSamplesDropped.ToString(CultureInfo.InvariantCulture) +
                                     " samples before analysis";
         }
-        else if (frame.AnalysisLagSamples > (ulong)Math.Max(1, mCurrentSamplesPerSecond / 4))
+        else if (frame.AnalysisLagSamples > (ulong)Math.Max(1, FrameSampleRate(frame) / 4))
         {
-            double lagMs = frame.AnalysisLagSamples * 1000.0 / Math.Max(1, mCurrentSamplesPerSecond);
+            double lagMs = frame.AnalysisLagSamples * 1000.0 / Math.Max(1, FrameSampleRate(frame));
             mViewModel.StatusText = string.Format(
                 CultureInfo.InvariantCulture,
                 "Analysis lag: {0:F0} ms ({1} samples), processing {2:F1} ms",
@@ -347,13 +347,15 @@ public partial class MainWindow : Window
 
     private void OnGraphicsTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        mFrameRenderScheduler.Reset();
+        // ResetTiming (not Reset) so a pending coalesced frame — and its merged
+        // transient signals — survives the tab switch and renders right after.
+        mFrameRenderScheduler.ResetTiming();
 
         AnalysisFrame? frame = mLastAnalysisFrame;
         if (frame != null && frame.SessionId == mRunSessionController.AnalysisSessionId)
         {
             mGraphFrameRenderer.UpdateResults(frame);
-            mFrameRouter.Route(frame, ActiveInfoTabId(), BuildTabRenderContext());
+            mFrameRouter.Route(frame, ActiveInfoTabId(), BuildTabRenderContext(frame));
         }
     }
 
@@ -395,11 +397,22 @@ public partial class MainWindow : Window
             RateDataPoints: ERROR_RATE_X_DATA_POINTS);
     }
 
-    private AnalysisTabRenderContext BuildTabRenderContext()
+    private AnalysisTabRenderContext BuildTabRenderContext(AnalysisFrame frame)
     {
         return new AnalysisTabRenderContext(
-            SampleRate: mCurrentSamplesPerSecond,
+            SampleRate: FrameSampleRate(frame),
             ScopeScale: Math.Max(1, (int)mViewModel.ScopeScale));
+    }
+
+    /// <summary>
+    /// Rate the frame's analysis run was configured with. Falls back to the current
+    /// UI rate for frames that predate the SampleRate field. Using the frame's own
+    /// rate keeps the final playback/sim frames correct after the device rate has
+    /// already been restored.
+    /// </summary>
+    private int FrameSampleRate(AnalysisFrame frame)
+    {
+        return frame.SampleRate > 0 ? frame.SampleRate : mCurrentSamplesPerSecond;
     }
 
     private string ActiveInfoTabId()

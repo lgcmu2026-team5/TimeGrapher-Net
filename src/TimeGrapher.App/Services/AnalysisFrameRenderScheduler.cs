@@ -39,6 +39,7 @@ internal sealed class AnalysisFrameRenderScheduler
             if (_pendingFrame != null)
             {
                 _droppedFrames++;
+                MergeTransientSignals(_pendingFrame, frame);
             }
 
             _pendingFrame = frame;
@@ -52,6 +53,18 @@ internal sealed class AnalysisFrameRenderScheduler
         }
 
         _postToUi(() => ProcessPendingFrame(generation));
+    }
+
+    /// <summary>One-shot signals on a displaced frame must survive coalescing.</summary>
+    private static void MergeTransientSignals(AnalysisFrame displaced, AnalysisFrame replacement)
+    {
+        replacement.InputOverrun |= displaced.InputOverrun;
+        replacement.InputSamplesDropped += displaced.InputSamplesDropped;
+        if (displaced.SoundImageUpdated && !replacement.SoundImageUpdated)
+        {
+            replacement.SoundImageUpdated = true;
+            replacement.SoundImage ??= displaced.SoundImage;
+        }
     }
 
     public void Reset()
