@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="TimeGrapher.App.Views.MainWindow"
         Title="TimeGrapher"
-        Icon="/Assets/App/AppIcon.ico"
+        Icon="/Assets/App/AppIcon-256.png"
         Width="1280" Height="750"
         MinWidth="900" MinHeight="560">
   <Grid RowDefinitions="36,*" Background="{DynamicResource SurfaceBgBrush}">
@@ -17,7 +17,7 @@
               PointerPressed="OnTitleBarPointerPressed">
           <Border Grid.Column="0"
                   Background="Transparent">
-            <Image Source="/Assets/App/AppIcon.png"
+            <Image Source="/Assets/App/AppIcon-256.png"
                    Width="26"
                    Height="26"
                    Margin="10,0,8,0"

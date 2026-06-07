@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="TimeGrapher.App.Views.SplashWindow"
-        Icon="/Assets/App/AppIcon.ico"
+        Icon="/Assets/App/AppIcon-256.png"
         Width="640" Height="360"
         MinWidth="640" MinHeight="360"
         MaxWidth="640" MaxHeight="360"

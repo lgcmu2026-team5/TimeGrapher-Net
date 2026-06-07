@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=TimeGrapher
+Exec=/home/team5/TimeGrapherNet-pi-smoke/TimeGrapher.App
+Icon=/home/team5/.local/share/icons/timegrapher.png
+StartupWMClass=TimeGrapher.App
+Categories=Utility;
