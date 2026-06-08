@@ -11,6 +11,71 @@
 - **비트 에러(ms)** — 똑/딱 간격의 불균형
 - **진폭(°)** — 밸런스 휠이 흔들리는 각도
 
+## Quick Start
+
+아무것도 설치되지 않은 환경을 기준으로, 사용하는 OS에 맞춰 따라 하세요.
+
+### Windows
+
+1. **의존성 설치** — .NET SDK 8과 Git을 설치합니다.
+
+   ```powershell
+   winget install Microsoft.DotNet.SDK.8
+   winget install Git.Git
+   ```
+
+   설치 후 새 터미널을 열고 `dotnet --version`이 `8.0.x`를 출력하는지 확인합니다.
+   (오디오 드라이버는 따로 설치할 필요가 없습니다 — 필요한 NAudio가 빌드에 포함됩니다.)
+
+2. **내려받기 + 빌드**
+
+   ```powershell
+   git clone https://github.com/Jae-hong-5/tg-dotnet.git
+   cd tg-dotnet
+   dotnet build TimeGrapherNet.sln -c Release   # 첫 빌드는 패키지 복원으로 몇 분 걸릴 수 있음
+   ```
+
+3. **실행**
+
+   ```powershell
+   dotnet run --project src/TimeGrapher.App                                   # GUI 실행
+   dotnet run --project src/TimeGrapher.Verify -c Release -- --generated --byte-fixtures   # 화면 없이 검출 정확도만 확인
+   ```
+
+### 라즈베리파이 5 (ARM64)
+
+자기 완결형(self-contained) 패키지로 배포하므로 **Pi에는 .NET을 설치하지 않아도 됩니다.**
+빌드는 개발 PC(위 Windows 절차로 준비된 PC)에서 하고, 결과물만 Pi로 복사합니다.
+
+1. **Pi 의존성 설치** — Pi 터미널에서 GUI 실행에 필요한 라이브러리를 설치합니다.
+
+   ```bash
+   sudo apt update
+   sudo apt install -y libx11-6 libice6 libsm6 libfontconfig1 xwayland
+   ```
+
+   마이크 입력을 쓰려면 PipeWire 또는 ALSA가 필요하며, Pi OS에는 보통 기본 포함되어 있습니다.
+
+2. **개발 PC에서 빌드(배포 패키지 생성)**
+
+   ```powershell
+   dotnet publish src/TimeGrapher.App/TimeGrapher.App.csproj -c Release -r linux-arm64 --self-contained true -o publish
+   ```
+
+3. **Pi로 복사 후 실행**
+
+   ```bash
+   # (개발 PC) publish 폴더를 Pi로 복사 — 예:
+   #   scp -r publish <사용자>@<Pi주소>:~/timegrapher
+   # (Pi) 복사한 폴더에서:
+   cd ~/timegrapher
+   chmod +x ./TimeGrapher.App
+   ./TimeGrapher.App            # 모니터 연결 시 GUI 실행
+   ./TimeGrapher.App --smoke    # 화면 없이 동작 점검 (장치 목록은 --audio-smoke)
+   ```
+
+   작업표시줄 아이콘 등록은 `deploy/linux/README.md`를 참고하세요.
+
 ## 주요 기능
 
 - 똑/딱 소리를 검출해 박자(BPH)를 자동·수동으로 잡고, 위상 추적으로 동기를 유지.
@@ -94,36 +159,7 @@ classDiagram
 
 자세한 설계 배경과 Qt→.NET 포팅 과정은 `docs/` 폴더를 참고하세요.
 
-## 빌드 / 실행
-
-요구: .NET SDK 8.0.421 이상.
-
-```powershell
-dotnet restore TimeGrapherNet.sln --locked-mode
-dotnet build TimeGrapherNet.sln -c Release
-dotnet test  TimeGrapherNet.sln -c Release
-dotnet run --project src/TimeGrapher.App          # GUI 실행
-```
-
-WAV 파일의 검출 정확도만 콘솔로 확인:
-
-```powershell
-dotnet run --project src/TimeGrapher.Verify -c Release -- --generated --byte-fixtures
-```
-
-### 라즈베리파이 5 배포
-
-```powershell
-dotnet publish src/TimeGrapher.App/TimeGrapher.App.csproj -c Release -r linux-arm64 --self-contained true
-```
-
-- GUI 실행에 필요한 패키지: `libx11-6`, `libice6`, `libsm6`, `libfontconfig1`, `xwayland`.
-- 마이크 입력은 PipeWire(`pw-record`)를 먼저 쓰고, 없으면 ALSA(`arecord`)로 대체합니다.
-- 화면 없이 점검: `./TimeGrapher.App --smoke`(앱 초기화), `--audio-smoke`(장치 목록),
-  `--capture-smoke`(짧게 캡처).
-- 작업표시줄 아이콘 등록은 `deploy/linux/README.md` 참고.
-
-### 기술 스택
+## 기술 스택
 
 | 패키지 | 버전 | 용도 |
 |---|---|---|
