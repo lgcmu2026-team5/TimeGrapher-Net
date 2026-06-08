@@ -13,6 +13,16 @@
 - `SAP_TACTICS_ANALYSIS.md`
   - SAP 교재 기준으로 적용된 Architecture Tactic·Design Pattern을 코드 근거로 매핑한다
   - 완전 적용/부분 적용/기각을 구분한다 (SW Architecture 과제용)
+- `MODULE_DECOMPOSITION_VIEW.md`
+  - 솔루션, 런타임 프로젝트, 테스트 프로젝트의 "is part of" 모듈 분해 관계를 Mermaid 다이어그램으로 보여준다
+- `MODULE_USES_VIEW.md`
+  - 각 모듈이 어떤 다른 모듈을 사용하는지와 그로 인한 결합 관계를 Mermaid 다이어그램으로 보여준다
+- `LAYERED_VIEW.md`
+  - 모듈을 layer로 묶고 위에서 아래로만 흐르는 allowed-to-use 관계를 Mermaid 다이어그램으로 보여준다
+- `MVC_VIEW.md`
+  - TimeGrapherNet의 View, Controller, Model 역할과 의존 제약을 Mermaid 다이어그램으로 보여준다
+- `DATA_MODEL_VIEW.md`
+  - WAV, 분석 실행, 오디오 버퍼, 검출 결과, 분석 프레임 등 시스템이 조작하는 데이터 엔티티와 관계를 Mermaid 다이어그램으로 보여준다
 
 ## 작업 기록/근거용
 
