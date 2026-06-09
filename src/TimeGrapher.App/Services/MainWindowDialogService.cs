@@ -20,7 +20,7 @@ internal sealed class MainWindowDialogService : ITimeGrapherDialogService
         {
             Title = "Record Session",
             Width = 360,
-            Height = 150,
+            SizeToContent = SizeToContent.Height,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -45,7 +45,6 @@ internal sealed class MainWindowDialogService : ITimeGrapherDialogService
         buttons.Children.Add(cancel);
 
         var panel = new StackPanel { Margin = new Avalonia.Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = "Record Session", FontWeight = FontWeight.Bold });
         panel.Children.Add(new TextBlock { Text = "Do you want to record this session ?", TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(buttons);
         dialog.Content = panel;
