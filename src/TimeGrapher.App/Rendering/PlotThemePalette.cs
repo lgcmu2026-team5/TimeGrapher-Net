@@ -14,9 +14,9 @@ internal readonly record struct PlotThemePalette(
     uint ScopeBg,
     uint ScopeGrid,
     uint TextPrimary,
+    uint TraceWave,
     uint TraceTick,
-    uint TraceTock,
-    uint StatusError)
+    uint TraceTock)
 {
     /// <summary>Palette for the currently requested application theme variant.</summary>
     public static PlotThemePalette Current =>
@@ -28,9 +28,9 @@ internal readonly record struct PlotThemePalette(
         ScopeBg: Lookup("ScopeBgColor", theme),
         ScopeGrid: Lookup("ScopeGridColor", theme),
         TextPrimary: Lookup("TextPrimaryColor", theme),
+        TraceWave: Lookup("TraceWaveColor", theme),
         TraceTick: Lookup("TraceTickColor", theme),
-        TraceTock: Lookup("TraceTockColor", theme),
-        StatusError: Lookup("StatusErrorColor", theme));
+        TraceTock: Lookup("TraceTockColor", theme));
 
     private static uint Lookup(string key, ThemeVariant theme)
     {

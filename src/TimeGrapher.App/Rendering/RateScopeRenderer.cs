@@ -36,11 +36,20 @@ internal sealed class RateScopeRenderer
     private readonly List<Scatter> _ratePlots = new();
     private PlotThemePalette _theme = PlotThemePalette.Current;
 
+    // The scope auto-follows incoming audio (scrolls its X window each frame). Once the
+    // user pans/zooms it, we stop following so the view stays put; ResetView() re-enables it.
+    private bool _scopeFollowLive = true;
+    private double _rateErrorYScale;
+    private int _rateDataPoints;
+
     public RateScopeRenderer(AvaPlot scopePlot, AvaPlot ratePlot, string textFontFamily)
     {
         _scopePlot = scopePlot;
         _ratePlot = ratePlot;
         _textFontFamily = textFontFamily;
+
+        _scopePlot.PointerWheelChanged += (_, _) => _scopeFollowLive = false;
+        _scopePlot.PointerPressed += (_, _) => _scopeFollowLive = false;
 
         GraphSeriesDefinition[] graphSeries = InfoTabCatalog.RateScope.GraphSeries.ToArray();
         _scopeSeries = graphSeries.Where(series => series.RenderMode == GraphSeriesRenderMode.Line).ToArray();
@@ -64,6 +73,9 @@ internal sealed class RateScopeRenderer
 
     public void CreateGraphs(double rateErrorYScale, int rateDataPoints)
     {
+        _rateErrorYScale = rateErrorYScale;
+        _rateDataPoints = rateDataPoints;
+        _scopeFollowLive = true;
         Plot scope = _scopePlot.Plot;
         scope.Clear();
         ApplyPlotTheme(scope);
@@ -78,7 +90,7 @@ internal sealed class RateScopeRenderer
         Plot rate = _ratePlot.Plot;
         rate.Clear();
         ApplyPlotTheme(rate);
-        rate.YLabel("Rate Error (milliseconds)");
+        rate.YLabel("Rate Error (ms)");
         rate.XLabel("Time");
         rate.Axes.SetLimitsY(-rateErrorYScale, rateErrorYScale);
         rate.Axes.SetLimitsX(0, rateDataPoints);
@@ -93,6 +105,9 @@ internal sealed class RateScopeRenderer
 
     public void Reset(double rateErrorYScale, int rateDataPoints)
     {
+        _rateErrorYScale = rateErrorYScale;
+        _rateDataPoints = rateDataPoints;
+        _scopeFollowLive = true;
         Plot scope = _scopePlot.Plot;
         scope.Clear();
         ApplyPlotTheme(scope);
@@ -125,12 +140,32 @@ internal sealed class RateScopeRenderer
         {
             ClearScopeMarkers();
             AddScopeMarkers(frame);
-            double width = (double)context.SampleRate / Math.Max(1, context.ScopeScale);
-            double end = frame.GraphTickEnd;
-            _scopePlot.Plot.Axes.SetLimitsX(end - width, end);
-            _scopePlot.Plot.Axes.AutoScaleY();
+            if (_scopeFollowLive)
+            {
+                double width = (double)context.SampleRate / Math.Max(1, context.ScopeScale);
+                double end = frame.GraphTickEnd;
+                _scopePlot.Plot.Axes.SetLimitsX(end - width, end);
+                _scopePlot.Plot.Axes.AutoScaleY();
+            }
+
             _scopePlot.Refresh();
         }
+    }
+
+    /// <summary>Resets the rate plot (top) to its configured limits.</summary>
+    public void ResetRateView()
+    {
+        _ratePlot.Plot.Axes.SetLimitsY(-_rateErrorYScale, _rateErrorYScale);
+        _ratePlot.Plot.Axes.SetLimitsX(0, _rateDataPoints);
+        _ratePlot.Refresh();
+    }
+
+    /// <summary>Restores the scope plot (bottom): re-arms live auto-follow and refits.</summary>
+    public void ResetScopeView()
+    {
+        _scopeFollowLive = true;
+        _scopePlot.Plot.Axes.AutoScale();
+        _scopePlot.Refresh();
     }
 
     private bool ReplaceScopeSeries(AnalysisFrame frame)
@@ -229,16 +264,21 @@ internal sealed class RateScopeRenderer
         plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
         plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
         plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
+        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        plot.Legend.BackgroundColor = Color.FromARGB(_theme.ScopeBg);
+        plot.Legend.FontColor = Color.FromARGB(_theme.TextPrimary);
+        plot.Legend.OutlineColor = Color.FromARGB(_theme.ScopeGrid);
     }
 
     private uint ThemeColor(GraphSeriesDefinition spec) => spec.Id switch
     {
-        // Both scopes: first series green, second series red.
-        AnalysisGraphSeries.ScopePcm => _theme.TraceTick,
-        AnalysisGraphSeries.ScopeThreshold => _theme.StatusError,
+        // Waveform = wave color; tick beats green; tock beats (and trigger) red.
+        AnalysisGraphSeries.ScopePcm => _theme.TraceWave,
+        AnalysisGraphSeries.ScopeThreshold => _theme.TraceTock,
         AnalysisGraphSeries.RateTic => _theme.TraceTick,
-        AnalysisGraphSeries.RateToc => _theme.StatusError,
-        _ => _theme.TraceTock,
+        AnalysisGraphSeries.RateToc => _theme.TraceTock,
+        _ => _theme.TraceWave,
     };
 
     private static List<double>[] CreateSeriesLists(int count)
@@ -379,8 +419,7 @@ internal sealed class RateScopeRenderer
     private uint ThemeColor(uint sourceColor) => sourceColor switch
     {
         Argb.Green => _theme.TraceTick,
-        Argb.Blue => _theme.TraceTock,
-        Argb.Red => _theme.StatusError,
+        Argb.Red => _theme.TraceTock,
         Argb.Black => _theme.TextPrimary,
         _ => sourceColor,
     };

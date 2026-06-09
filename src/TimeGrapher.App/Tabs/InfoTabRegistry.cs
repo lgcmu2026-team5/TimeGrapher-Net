@@ -32,6 +32,7 @@ internal sealed class InfoTabRegistry
         {
             [InfoTabKind.RateScope] = CreateRateScopeRegistration,
             [InfoTabKind.SoundPrint] = CreateSoundPrintRegistration,
+            [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
     private readonly IReadOnlyList<InfoTabRegistration> _registrations;
@@ -152,6 +153,28 @@ internal sealed class InfoTabRegistry
         }
 
         var renderer = new RateScopeRenderer(scopePlot, ratePlot, context.TextFontFamily);
+
+        // A per-plot "Reset View" button, pinned to the top-right of its own plot row.
+        Button MakeResetButton(int row, Action onClick)
+        {
+            var button = new Button
+            {
+                Content = "Reset View",
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 6, 10, 0),
+                Padding = new Thickness(8, 2, 8, 2),
+                FontSize = 11,
+            };
+            ToolTip.SetTip(button, "Reset this graph's view");
+            button.Click += (_, _) => onClick();
+            Grid.SetRow(button, row);
+            return button;
+        }
+
+        grid.Children.Add(MakeResetButton(0, renderer.ResetRateView));
+        grid.Children.Add(MakeResetButton(1, renderer.ResetScopeView));
+
         var consumer = new RateScopeFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
@@ -174,6 +197,25 @@ internal sealed class InfoTabRegistry
 
         var renderer = new SoundPrintRenderer(image);
         var consumer = new SoundPrintFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreatePlaceholderRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        _ = context;
+        var label = new TextBlock
+        {
+            Text = definition.Title + " (준비 중)",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.5,
+        };
+        var grid = new Grid();
+        grid.Children.Add(label);
+
+        var consumer = new PlaceholderFrameConsumer(definition.Id);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 

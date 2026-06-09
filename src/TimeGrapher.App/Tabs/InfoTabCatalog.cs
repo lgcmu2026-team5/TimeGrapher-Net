@@ -6,6 +6,7 @@ internal enum InfoTabKind
 {
     RateScope,
     SoundPrint,
+    Placeholder,
 }
 
 internal enum GraphSeriesRenderMode
@@ -48,11 +49,45 @@ internal static class InfoTabCatalog
         new(AnalysisGraphSeries.RateToc, "Toc Rate", Argb.Blue, GraphSeriesRenderMode.Points, RateTargetPointBudget),
     };
 
-    private static readonly InfoTabDefinition[] Definitions =
+    private static readonly InfoTabDefinition[] Definitions = BuildDefinitions();
+
+    private static InfoTabDefinition[] BuildDefinitions()
     {
-        new(RateScopeTabId, "Rate/Scope", InfoTabKind.RateScope, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: true, RateScopeSeries),
-        new(SoundPrintTabId, "Sound Print", InfoTabKind.SoundPrint, SoundPrintRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
-    };
+        var definitions = new List<InfoTabDefinition>
+        {
+            new(RateScopeTabId, "Rate/Scope", InfoTabKind.RateScope, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: true, RateScopeSeries),
+            new(SoundPrintTabId, "Sound Print", InfoTabKind.SoundPrint, SoundPrintRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
+        };
+
+        // Reserved placeholder tabs for features not yet built (total tab count = 12).
+        // Titles are shortened from the planned feature names to fit the tab width.
+        (string Id, string Title)[] placeholders =
+        {
+            ("test-positions", "Test Positions"),
+            ("rate-amp-stability", "Rate/Amp Stability"),
+            ("multi-position-seq", "Multi-Position Seq"),
+            ("beat-noise-scope", "Beat-Noise Scope"),
+            ("beat-error-diag", "Beat Error Diag"),
+            ("long-term-perf", "Long-Term Perf"),
+            ("escapement-analyzer", "Escapement Analyzer"),
+            ("spectrogram", "Spectrogram"),
+            ("waveform-compare", "Waveform Compare"),
+            ("multi-filter-scope", "Multi-Filter Scope"),
+        };
+
+        foreach ((string id, string title) in placeholders)
+        {
+            definitions.Add(new(
+                id,
+                title,
+                InfoTabKind.Placeholder,
+                DefaultUiRefreshIntervalMs,
+                UsesGraphSnapshots: false,
+                Array.Empty<GraphSeriesDefinition>()));
+        }
+
+        return definitions.ToArray();
+    }
 
     public static IReadOnlyList<InfoTabDefinition> All => Definitions;
 

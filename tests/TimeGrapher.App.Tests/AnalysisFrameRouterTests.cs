@@ -1,3 +1,4 @@
+using System.Linq;
 using TimeGrapher.App.Tabs;
 using TimeGrapher.Core.Shared;
 using Xunit;
@@ -24,11 +25,8 @@ public sealed class AnalysisFrameRouterTests
     [Fact]
     public void RouterReportsRegisteredTabConsumers()
     {
-        var router = new AnalysisFrameRouter(new IAnalysisFrameConsumer[]
-        {
-            new FakeConsumer(InfoTabCatalog.RateScopeTabId),
-            new FakeConsumer(InfoTabCatalog.SoundPrintTabId),
-        });
+        var router = new AnalysisFrameRouter(
+            InfoTabCatalog.All.Select(tab => (IAnalysisFrameConsumer)new FakeConsumer(tab.Id)).ToArray());
 
         Assert.All(InfoTabCatalog.All, tab => Assert.True(router.HasConsumer(tab.Id)));
         Assert.False(router.HasConsumer("missing"));
