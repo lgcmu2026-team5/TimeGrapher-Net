@@ -124,6 +124,8 @@ Avalonia 화면 주 스레드
 
 화면 주 스레드는 버튼, 탭, 그래프 표시를 담당한다. 오디오 분석, 검출, 이미지 계산은 백그라운드 작업에서 처리한다. 이 경계를 지키면 Raspberry Pi처럼 성능 여유가 적은 환경에서도 화면이 덜 밀린다.
 
+원본과 포팅본을 성능 tactic·디자인 패턴 차원에서 정량 비교한 결과(비트당 125 ms 예산 기준)는 `SAP_TACTICS_ANALYSIS.md`의 "실시간 마감 예산" 절과 5절에 정리되어 있다.
+
 ## Raspberry Pi 대응
 
 Pi용 배포는 `linux-arm64` self-contained publish를 사용한다.

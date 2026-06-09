@@ -166,3 +166,36 @@ work requests** — 점진적 저하). 패스마다 백로그를 **비트 주기
 1. **CI로 강제되는 의존성 경계** — 아키텍처 규칙을 문서가 아닌 *실패하는 테스트*로 못박았다(architecture fitness function). `ci.yml`이 Core의 OS 의존을 grep으로 차단하고, OS별 산출물에 잘못된 DLL이 섞이면 실패시킨다.
 2. **"최신 프레임만" 렌더 + 활성 탭만 렌더** — 실시간 UI 멈춤을 막는 성능 tactic 집합(`limit event response` + `schedule resources` + `reduce overhead`).
 3. **단조 run-session token** — 실시간 시작/중지의 stale-response 버그를 구조적으로 차단한다(`timestamp` tactic).
+
+---
+
+## 5. 원본(Qt/C++) 대비 성능 tactic·패턴 비교
+
+> 2026-06-09, 원본 Qt/C++ TimeGrapher와 이 포팅본을 **비트당 125 ms 예산** 관점에서
+> 양쪽 코드 file:line 대조로 분석한 결과다(주장 27건 전수 검증). 비교에서 발견된
+> 포팅 회귀 6건은 `perf(imaging)`/`perf(analysis)`x2/`perf(detection)`/`perf(shared)`/
+> `perf(rendering)` 커밋으로 수정했고, 마감 강제는 `feat(analysis)` 커밋으로
+> 추가했다. **아래 표는 수정 반영 후 상태다.**
+
+### 5.1 SEI 성능 tactic 비교
+
+| SEI Tactic | 원본 (Qt/C++) | 포팅본 (C#) |
+|---|---|---|
+| **introduce concurrency** | 부분 — 캡처만 별도 QThread. 검출 + 플롯 + WAV 쓰기는 전부 GUI 스레드(`MainWindow.cpp:901-1027`) → UI 지연이 곧 검출 지연 | **완전** — AnalysisWorker 전용 스레드(Highest) + WavWriter 스레드 + UI 3계층. **포팅 최대 개선**: UI가 느려져도 검출은 영향 없음 |
+| **limit event response** | 페인트 합류만(QCustomPlot `rpQueuedReplot`) | 단일 슬롯 latest-wins 프레임 합류 + 탭별 33/100 ms 스로틀 + 일회성 신호(오버런)는 병합으로 보존(`AnalysisFrameRenderScheduler.cs`) |
+| **bound resource usage** | 그래프가 10초 = 48만 포인트 보유, 매초 50–100회 **전체 컨테이너 rescale**, ~5초마다 24만 포인트 purge 스파이크 | 생산 측에서 8000/250 포인트로 데시메이션 — 원본의 최악 비용 2개가 구조적으로 소멸. **1시간째 비용 = 1초째 비용** |
+| **bound queue sizes** | 링은 무음 랩 — 드롭 계측 없음, 30초 이상 밀리면 손상된 타임라인을 감지 없이 읽음 | 모든 버퍼 바운드 + 드롭 정책 명시·계측(링 / WAV 큐 128 / 렌더 큐 1) |
+| **schedule resources** | Windows에서 프로세스 전체 `REALTIME_PRIORITY_CLASS` + `timeBeginPeriod(1)` (포팅본엔 없음) | 스레드 우선순위 사다리 + **활성 탭만 렌더링**(Strategy 라우팅). ⚠ .NET `Thread.Priority`는 **Linux에서 no-op** — Pi에서 우선순위는 무효과이며 실제 보호 장치는 바운드 큐 구조다 |
+| **increase resource efficiency** | O(1) 증분 알고리즘(`RollingLeastSquares`, PLL ~30 flops/event) | 동일하게 충실 포팅 — 세션 길이와 무관하게 비트당 비용 평탄. 마커→컬럼 조회도 O(1)로 개선(원본은 양쪽 다 O(폭) 선형 탐색이던 핫스팟) |
+| **bound execution times** | 알고리즘 캡만(C-onset 탐색 ~5 ms 등). 스냅샷 바운드 드레인은 원본에도 있음 | 동일 + 4096청크마다 stop 체크 + `ProcessingElapsedMs` 측정 + **`AnalysisDeadlineMonitor`가 백로그를 비트 주기로 환산해 점진 저하 실행**(위 "실시간 마감 예산" 절) |
+
+### 5.2 성능 관련 디자인 패턴 비교
+
+| 패턴 | 비교 |
+|---|---|
+| **Producer-Consumer (30초 공유 링)** | 양쪽의 하중 지지 패턴. 포팅본이 추가한 것: 오버런 드롭 계측, 드레인 중 중단 가능, 지연 텔레메트리 |
+| **Producer-Consumer (WAV 기록, bounded)** | **원본에 없음** — GUI 스레드에서 동기 블로킹 파일 I/O(`MainWindow.cpp:926`). SD카드 fsync 지연이 비트 예산을 직접 잠식. 포팅본은 ArrayPool + BlockingCollection(128) drop-never-block, 큐 깊이가 디스크 지연 ~10.9초 흡수 |
+| **Observer (queued) + 세션 게이팅** | 양쪽 다 알림에 페이로드를 싣지 않음(데이터는 링으로만). 포팅본은 SessionId + 세대 카운터 3중 게이팅으로 이전 런의 늦은 프레임이 새 런 예산을 0 소비 |
+| **Active Object / Mediator / Guarded Suspension** | 포팅본이 더 명시적(`RunSessionController`, `WorkerPauseGate` 50 ms 슬라이스) — 핫 상태 단일 라이터 보장, 정지 경로가 UI를 못 잠그게 함 |
+| **Pipes-and-Filters (DSP 체인)** | 양쪽 동일한 포크 토폴로지(검출기는 지연 안 된 envelope을 읽음). 비트당 코어의 ~0.05–0.2% — 병렬화 불필요, 동기 체인 유지가 C 원본 대비 검증성 보존 |
+| **Double Buffering** | 원본: 동일 스레드라 QImage 하나로 무복사. 포팅본: 스레드가 분리되어 발행 스냅샷이 필요 — **고정 3버퍼 풀 로테이션**으로 정상 상태 할당 0(UI 측은 WriteableBitmap + 스크래치 재사용) |
