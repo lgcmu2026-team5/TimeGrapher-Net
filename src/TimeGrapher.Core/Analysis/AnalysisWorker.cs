@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using TimeGrapher.Core.AudioIo;
+using TimeGrapher.Core.Detection;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.Core.Analysis;
@@ -39,7 +40,12 @@ public sealed class AnalysisWorker : IDisposable
     private readonly DetectorMetricsEngine _pipeline;
     private readonly ScopeRateFrameProjector _scopeRateProjector;
     private readonly SoundPrintFrameProjector _soundPrintProjector;
+    private readonly AnalysisDeadlineMonitor _deadlineMonitor = new();
     private readonly float[] _inputBlock;
+
+    // PLL-tracked beat period captured while synced; the deadline monitor falls
+    // back to the 28800-BPH default (125 ms) before the first lock.
+    private double _latestBeatPeriodS;
 
     private ulong _nextFrameSourceId = 1;
     private bool _foregroundTimerStarted = false;
@@ -264,6 +270,11 @@ public sealed class AnalysisWorker : IDisposable
             _soundPrintProjector.ProcessSamples(block);
 
             DetectorMetricsBlockUpdate pipelineUpdate = _pipeline.Process(block);
+            if (pipelineUpdate.Result.SyncStatus == TgSyncStatus.Synced &&
+                pipelineUpdate.Result.MeasuredPeriodS > 0.0)
+            {
+                _latestBeatPeriodS = pipelineUpdate.Result.MeasuredPeriodS;
+            }
             _scopeRateProjector.Project(pipelineUpdate, frame);
             _soundPrintProjector.Project(pipelineUpdate);
             UpdateForegroundStats(read.SamplesCopied, frame);
@@ -283,7 +294,30 @@ public sealed class AnalysisWorker : IDisposable
             : 0;
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
 
+        if (_deadlineMonitor.Observe(frame.AnalysisLagSamples, _config.SampleRate, _latestBeatPeriodS))
+        {
+            ApplyDeadlineLevel(_deadlineMonitor.Level);
+        }
+        frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
+
         AnalysisFrameReady?.Invoke(frame);
+    }
+
+    /*
+        ApplyDeadlineLevel()
+        --------------------
+        Graceful-degradation ladder, cheapest visual cost first:
+            level 1: stop redrawing the in-progress sound-print column
+            level 2: stretch the sound-print publish interval 100 ms -> 400 ms
+            level 3: coarsen the scope decimation stride 2x
+        Idempotent per level; de-escalation restores the knobs the same way.
+        Runs on the analysis thread between frames.
+    */
+    private void ApplyDeadlineLevel(int level)
+    {
+        _soundPrintProjector.SetLivePreviewEnabled(level < 1);
+        _soundPrintProjector.SetPublishIntervalScale(level < 2 ? 1 : 4);
+        _scopeRateProjector.SetScopeStrideScale(level < 3 ? 1 : 2);
     }
 
     private void DrainAndFlushInput()
@@ -310,6 +344,7 @@ public sealed class AnalysisWorker : IDisposable
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame, force: true);
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
+        frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
 
         AnalysisFrameReady?.Invoke(frame);
     }

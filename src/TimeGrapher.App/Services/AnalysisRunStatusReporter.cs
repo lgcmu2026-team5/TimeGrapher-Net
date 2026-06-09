@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using TimeGrapher.Core.Analysis;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Services;
@@ -72,6 +73,16 @@ internal sealed class AnalysisRunStatusReporter
                 lagMs,
                 frame.AnalysisLagSamples,
                 frame.ProcessingElapsedMs);
+        }
+        else if (frame.DeadlineDegradationLevel > 0)
+        {
+            // Sticky state from the analysis-side deadline monitor: lag may have
+            // subsided below the warning threshold while quality is still reduced.
+            statusText = string.Format(
+                CultureInfo.InvariantCulture,
+                "Deadline pressure: rendering quality reduced (level {0}/{1})",
+                frame.DeadlineDegradationLevel,
+                AnalysisDeadlineMonitor.MaxLevel);
         }
         else if (droppedFrames != 0)
         {

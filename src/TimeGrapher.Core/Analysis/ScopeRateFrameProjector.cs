@@ -32,11 +32,22 @@ public sealed class ScopeRateFrameProjector
     private bool _haveLastA;
     private bool _hasLatestResultsText;
 
+    private int _strideScale = 1;
+
     public ScopeRateFrameProjector(int sampleRate, bool useCOnset, int scopeSnapshotPointBudget)
     {
         _sampleRate = sampleRate;
         _useCOnset = useCOnset;
         _scopeSnapshotPointBudget = scopeSnapshotPointBudget;
+    }
+
+    /// <summary>
+    /// Deadline-degradation knob: coarsen the scope decimation stride by an integer
+    /// factor (1 = the configured point budget). Analysis thread only.
+    /// </summary>
+    public void SetScopeStrideScale(int scale)
+    {
+        _strideScale = Math.Max(1, scale);
     }
 
     public void Project(DetectorMetricsBlockUpdate update, AnalysisFrame frame)
@@ -226,7 +237,7 @@ public sealed class ScopeRateFrameProjector
         int maxWindowSamples = Math.Max(1, ScopeSnapshotSeconds * _sampleRate);
         int pointBudget = Math.Max(1, _scopeSnapshotPointBudget);
         int budgetStride = (int)Math.Ceiling(maxWindowSamples / (double)pointBudget);
-        return Math.Max(baseStride, budgetStride);
+        return Math.Max(baseStride, budgetStride) * _strideScale;
     }
 
     private void TrimScopeWindow()

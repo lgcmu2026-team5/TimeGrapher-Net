@@ -415,6 +415,15 @@ public sealed class SoundImageRenderer
         _cfg.SoundColor = color;
     }
 
+    /// <summary>
+    /// Enables/disables the live redraw of the in-progress column. Used by the
+    /// deadline-degradation ladder; call on the rendering thread between frames.
+    /// </summary>
+    public void SetLivePreviewCurrentColumn(bool enabled)
+    {
+        _cfg.LivePreviewCurrentColumn = enabled;
+    }
+
     public void SetBackgroundColor(uint color)
     {
         _cfg.BackgroundColor = color;

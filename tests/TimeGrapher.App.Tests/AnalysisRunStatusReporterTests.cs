@@ -57,6 +57,20 @@ public sealed class AnalysisRunStatusReporterTests
     }
 
     [Fact]
+    public void DeadlineDegradationLevelShowsQualityReducedStatus()
+    {
+        var reporter = new AnalysisRunStatusReporter();
+        // Lag already back under the warning threshold, but the monitor still
+        // holds a reduced-quality level -> the sticky state must stay visible.
+        var frame = new AnalysisFrame { DeadlineDegradationLevel = 2 };
+
+        AnalysisRunStatusReporter.Report report = reporter.Describe(frame, 0, SampleRate);
+
+        Assert.Contains("quality reduced", report.StatusText);
+        Assert.Contains("2/3", report.StatusText);
+    }
+
+    [Fact]
     public void DroppedFramesWithoutChangeWarnsToConsoleOnly()
     {
         var reporter = new AnalysisRunStatusReporter();

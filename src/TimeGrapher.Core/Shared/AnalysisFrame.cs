@@ -133,6 +133,8 @@ public sealed class AnalysisFrame
     public ulong PendingSamples;
     public ulong AnalysisLagSamples;
     public double ProcessingElapsedMs;
+    /// <summary>Current AnalysisDeadlineMonitor ladder level (0 = full quality).</summary>
+    public int DeadlineDegradationLevel;
 
     public IReadOnlyList<GraphSeriesFrame> ScopeSeries => _scopeSeries;
     public IReadOnlyList<GraphSeriesFrame> RateSeries => _rateSeries;

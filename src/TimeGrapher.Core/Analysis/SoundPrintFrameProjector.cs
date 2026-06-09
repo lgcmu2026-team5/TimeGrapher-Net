@@ -25,6 +25,7 @@ public sealed class SoundPrintFrameProjector
     private readonly Stopwatch _publishTimer = new();
     private bool _publishPending = true;
     private bool _hasBph;
+    private int _publishIntervalScale = 1;
 
     public SoundPrintFrameProjector(int sampleRate, int width, int height, uint backgroundColor)
     {
@@ -56,6 +57,24 @@ public sealed class SoundPrintFrameProjector
     public void ProcessSamples(ReadOnlySpan<float> block)
     {
         _soundRenderer.ProcessSamples(block);
+    }
+
+    /// <summary>
+    /// Deadline-degradation knob: disable/re-enable the live redraw of the
+    /// in-progress column. Analysis thread only.
+    /// </summary>
+    public void SetLivePreviewEnabled(bool enabled)
+    {
+        _soundRenderer.SetLivePreviewCurrentColumn(enabled);
+    }
+
+    /// <summary>
+    /// Deadline-degradation knob: stretch the publish interval by an integer
+    /// factor (1 = the default 100 ms cadence). Analysis thread only.
+    /// </summary>
+    public void SetPublishIntervalScale(int scale)
+    {
+        _publishIntervalScale = Math.Max(1, scale);
     }
 
     /// <summary>
@@ -106,7 +125,7 @@ public sealed class SoundPrintFrameProjector
         if (force ||
             _publishPending ||
             !_publishTimer.IsRunning ||
-            _publishTimer.ElapsedMilliseconds >= SoundImagePublishIntervalMs)
+            _publishTimer.ElapsedMilliseconds >= (long)SoundImagePublishIntervalMs * _publishIntervalScale)
         {
             PixelBuffer snapshot = _publishBuffers[_nextPublishBuffer];
             _nextPublishBuffer = (_nextPublishBuffer + 1) % PublishBufferCount;
