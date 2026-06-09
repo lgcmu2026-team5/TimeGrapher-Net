@@ -1,0 +1,28 @@
+# Normalize line endings: store text as LF in the repo, check out native on each OS.
+* text=auto
+
+# Source files are always LF in the repo (prevents CRLF churn on Windows checkouts).
+*.cs    text eol=lf
+*.axaml text eol=lf
+*.xaml  text eol=lf
+*.csproj text eol=lf
+*.sln   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# Windows scripts keep CRLF.
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# Binary assets — never normalize.
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.ttf   binary
+*.otf   binary
+*.wav   binary
+*.dll   binary

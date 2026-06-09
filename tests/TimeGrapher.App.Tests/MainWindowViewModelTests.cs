@@ -204,6 +204,19 @@ public sealed class MainWindowViewModelTests
         Assert.Contains(nameof(MainWindowViewModel.LiftAngle), changed);
     }
 
+    [Fact]
+    public void IsAwaitingBeatSyncRaisesPropertyChanged()
+    {
+        var vm = CreateViewModel();
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        vm.IsAwaitingBeatSync = true;
+
+        Assert.True(vm.IsAwaitingBeatSync);
+        Assert.Contains(nameof(MainWindowViewModel.IsAwaitingBeatSync), raised);
+    }
+
     private static MainWindowViewModel CreateViewModel()
     {
         return new MainWindowViewModel(

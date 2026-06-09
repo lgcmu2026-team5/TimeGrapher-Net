@@ -148,6 +148,44 @@ public sealed class RunCommandServiceTests
     }
 
     [Fact]
+    public void StopClearsAwaitingBeatSyncFlag()
+    {
+        MainWindowViewModel vm = CreateViewModel();
+        vm.SetRunning();
+        vm.IsAwaitingBeatSync = true;
+        var operations = new FakeRunCommandOperations
+        {
+            CurrentMode = RunCommandMode.Playback,
+            HasActiveWorker = true,
+        };
+        var service = new RunCommandService(vm, operations);
+
+        service.Stop();
+
+        Assert.False(vm.IsAwaitingBeatSync);
+    }
+
+    [Fact]
+    public async Task StartSetsAwaitingBeatSyncFlag()
+    {
+        MainWindowViewModel vm = CreateViewModel();
+        var operations = new FakeRunCommandOperations
+        {
+            CurrentMode = RunCommandMode.Live,
+        };
+        operations.StartLiveAsyncImpl = () =>
+        {
+            vm.SetRunning();
+            return Task.FromResult(true);
+        };
+        var service = new RunCommandService(vm, operations);
+
+        await service.StartAsync();
+
+        Assert.True(vm.IsAwaitingBeatSync);
+    }
+
+    [Fact]
     public void StopSimulationRestoresSampleRateButKeepsGainDisabled()
     {
         MainWindowViewModel vm = CreateViewModel();

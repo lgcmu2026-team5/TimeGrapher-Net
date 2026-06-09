@@ -83,12 +83,7 @@ public partial class MainWindow : Window
     private int mCurrentSamplesPerSecond;
     private int mRateBeforePlaybackOrSim;
     private string mDeviceNameBeforePlaybackOrSim = "";
-    private double mBackgroundLastFPS;
-    private double mBackgroundLastSPF;
-    private double mBackgroundLastSPS;
-    private double mForegroundLastFPS;
-    private double mForegroundLastSPF;
-    private double mForegroundLastSPS;
+    private readonly AnalysisRunStatusReporter mRunStatusReporter = new();
     private AnalysisFrame? mLastAnalysisFrame;
     private bool mIsClosing;
     private readonly MainWindowViewModel mViewModel;
@@ -140,9 +135,6 @@ public partial class MainWindow : Window
         catch { /* keep current dir */ }
 
         mCurrentSamplesPerSecond = 48000;
-        mBackgroundLastFPS = 0.0;
-        mBackgroundLastSPF = 0.0;
-        mBackgroundLastSPS = 0.0;
 
         Title = "TimeGrapher";
 
@@ -278,59 +270,15 @@ public partial class MainWindow : Window
         mGraphFrameRenderer.UpdateResults(frame);
         mFrameRouter.Route(frame, ActiveInfoTabId(), BuildTabRenderContext(frame));
 
-        bool statusUpdated = false;
-        if ((mBackgroundLastFPS != frame.BackgroundFps) ||
-            (mBackgroundLastSPS != frame.BackgroundSps) ||
-            (mBackgroundLastSPF != frame.BackgroundSpf))
+        AnalysisRunStatusReporter.Report report =
+            mRunStatusReporter.Describe(frame, droppedFrames, FrameSampleRate(frame));
+        if (report.StatusText != null)
         {
-            mBackgroundLastFPS = frame.BackgroundFps;
-            mBackgroundLastSPS = frame.BackgroundSps;
-            mBackgroundLastSPF = frame.BackgroundSpf;
-            statusUpdated = true;
+            mViewModel.StatusText = report.StatusText;
         }
-        if (frame.ForegroundStatsUpdated &&
-            ((mForegroundLastFPS != frame.ForegroundFps) ||
-             (mForegroundLastSPS != frame.ForegroundSps) ||
-             (mForegroundLastSPF != frame.ForegroundSpf)))
+        if (report.ConsoleWarning != null)
         {
-            mForegroundLastFPS = frame.ForegroundFps;
-            mForegroundLastSPS = frame.ForegroundSps;
-            mForegroundLastSPF = frame.ForegroundSpf;
-            statusUpdated = true;
-        }
-        if (statusUpdated)
-        {
-            mViewModel.StatusText = string.Format(
-                CultureInfo.InvariantCulture,
-                "Backgroud Audio Thread Average - FPS:{0}, SPS:{1}, SPF: {2} Foregroud Audio Handler Average - FPS:{3}, SPS:{4}, SPF: {5}",
-                mBackgroundLastFPS.ToString("F0", CultureInfo.InvariantCulture),
-                mBackgroundLastSPS.ToString("F0", CultureInfo.InvariantCulture),
-                mBackgroundLastSPF.ToString("F0", CultureInfo.InvariantCulture),
-                mForegroundLastFPS.ToString("F0", CultureInfo.InvariantCulture),
-                mForegroundLastSPS.ToString("F0", CultureInfo.InvariantCulture),
-                mForegroundLastSPF.ToString("F0", CultureInfo.InvariantCulture));
-        }
-        if (frame.InputOverrun)
-        {
-            mViewModel.StatusText = "Audio input overrun: dropped " +
-                                    frame.InputSamplesDropped.ToString(CultureInfo.InvariantCulture) +
-                                    " samples before analysis";
-        }
-        else if (frame.AnalysisLagSamples > (ulong)Math.Max(1, FrameSampleRate(frame) / 4))
-        {
-            double lagMs = frame.AnalysisLagSamples * 1000.0 / Math.Max(1, FrameSampleRate(frame));
-            mViewModel.StatusText = string.Format(
-                CultureInfo.InvariantCulture,
-                "Analysis lag: {0:F0} ms ({1} samples), processing {2:F1} ms",
-                lagMs,
-                frame.AnalysisLagSamples,
-                frame.ProcessingElapsedMs);
-        }
-        else if (droppedFrames != 0)
-        {
-            Console.Error.WriteLine("UI render coalesced " +
-                                    droppedFrames.ToString(CultureInfo.InvariantCulture) +
-                                    " analysis frame(s)");
+            Console.Error.WriteLine(report.ConsoleWarning);
         }
     }
 
@@ -338,12 +286,7 @@ public partial class MainWindow : Window
     {
         mGraphFrameRenderer.Reset(BuildTabResetContext());
 
-        mBackgroundLastFPS = 0.0;
-        mBackgroundLastSPF = 0.0;
-        mBackgroundLastSPS = 0.0;
-        mForegroundLastFPS = 0.0;
-        mForegroundLastSPF = 0.0;
-        mForegroundLastSPS = 0.0;
+        mRunStatusReporter.Reset();
     }
 
     // --- Event handlers (Qt on_* slots) ---
