@@ -4,4 +4,17 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <!--
+    Product / version metadata. Inherited by every project and compiled into each
+    assembly's attributes (AssemblyVersion/FileVersion/InformationalVersion all derive
+    from Version). Bump Version on each release.
+  -->
+  <PropertyGroup>
+    <Product>TimeGrapher</Product>
+    <Authors>Jae-hong Oh &lt;jaehong.oh@lge.com&gt;</Authors>
+    <Company>CMU X LG Electronics Inc.</Company>
+    <Copyright>Copyright © 2026 Carnegie Mellon University</Copyright>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
 </Project>
