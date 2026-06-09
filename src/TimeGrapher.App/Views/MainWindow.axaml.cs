@@ -136,7 +136,9 @@ public partial class MainWindow : Window
 
         mCurrentSamplesPerSecond = 48000;
 
-        Title = "TimeGrapher";
+        string appTitle = BuildAppTitle();
+        Title = appTitle;
+        AppTitleText.Text = appTitle;
 
         // Results->setAlignment(Qt::AlignHCenter); set in XAML.
         mInfoTabRegistry = InfoTabRegistry.FromCatalog(GraphicsTabWidget, APP_FONT_FAMILY, mViewModel);
@@ -157,7 +159,7 @@ public partial class MainWindow : Window
         LoadAudioDevices();
         mGraphFrameRenderer.Initialize(BuildTabResetContext());
         LoadAveragingPeriod();
-        Results.Text = "RATE ------ s/d   AMPLITUDE ---   BEAT ERROR ---- ms   BEAT ----- bph";
+        mGraphFrameRenderer.SetResults(GraphFrameRenderer.PlaceholderResults);
         SetGuiStopMode();
 
         Closed += OnWindowClosed;
@@ -359,6 +361,13 @@ public partial class MainWindow : Window
     private int FrameSampleRate(AnalysisFrame frame)
     {
         return frame.SampleRate > 0 ? frame.SampleRate : mCurrentSamplesPerSecond;
+    }
+
+    // "TimeGrapher v{Major}.{Minor}.{Build}" from the assembly version (set in Directory.Build.props).
+    private static string BuildAppTitle()
+    {
+        System.Version? v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        return v is null ? "TimeGrapher" : $"TimeGrapher v{v.Major}.{v.Minor}.{v.Build}";
     }
 
     private string ActiveInfoTabId()

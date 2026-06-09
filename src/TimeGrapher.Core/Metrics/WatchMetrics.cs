@@ -298,6 +298,14 @@ public sealed class WatchMetrics
         return " " + FormatFixed(beatTimeSeconds * 1000.0, 1) + " ms ";
     }
 
+    // The title-bar readout wraps each live numeric value in these markers so the UI can color
+    // only the numbers (not the labels or dash placeholders). Braces never occur in the values
+    // or labels themselves, and the UI strips them before display.
+    public const char ValueSpanStart = '{';
+    public const char ValueSpanEnd = '}';
+
+    private static string Mark(string value) => ValueSpanStart + value + ValueSpanEnd;
+
     private string FormatResults()
     {
         string beatsPerHour;
@@ -308,7 +316,7 @@ public sealed class WatchMetrics
         if (_bphValid)
         {
             // QString("%1").arg(mBph, 5, 10, QChar(' ')) : int, width 5, space-padded, right-aligned
-            beatsPerHour = ArgInt(_bph, 5);
+            beatsPerHour = Mark(ArgInt(_bph, 5));
         }
         else
         {
@@ -317,18 +325,18 @@ public sealed class WatchMetrics
 
         if (_rlsRateValid)
         {
-            // QString::asprintf("%+6.1f", mRlsRate)
-            rateError = PrintfPlusFloat(_rlsRate, 6, 1);
+            // Width 5: forced sign + "%.1f" covers "-99.9".."+99.9"; rate stays within ±99.9.
+            rateError = Mark(PrintfPlusFloat(_rlsRate, 5, 1));
         }
         else
         {
-            rateError = "------";
+            rateError = "-----";
         }
 
         if (_rollBeatError.CurrentSize() > 0)
         {
-            // QString("%1").arg(GetAverage(), 4, 'f', 1) : double, width 4, 1 decimal, space-padded
-            beatError = ArgFixed(_rollBeatError.GetAverage(), 4, 1);
+            // Width 4 covers the full range ("-9.9".."99.9"); beat error never reaches ±10.
+            beatError = Mark(ArgFixed(_rollBeatError.GetAverage(), 4, 1));
         }
         else
         {
@@ -337,16 +345,17 @@ public sealed class WatchMetrics
 
         if (_rollAmplitude.CurrentSize() > 0)
         {
-            // QString("%1%2").arg(qRound64(GetAverage()), 3, 10, QChar(' ')).arg(degree)
-            amplitudeText = ArgLong(QRound64(_rollAmplitude.GetAverage()), 3) + "°";
+            // Width 3; the degree sign is appended as a constant suffix below so the field
+            // width stays identical whether or not a value is present.
+            amplitudeText = Mark(ArgLong(QRound64(_rollAmplitude.GetAverage()), 3));
         }
         else
         {
             amplitudeText = "---";
         }
 
-        return "RATE " + rateError + " s/d   AMPLITUDE " + amplitudeText +
-               "   BEAT ERROR " + beatError + " ms   BEAT " + beatsPerHour + " bph";
+        return "RATE " + rateError + " s/d | AMPLITUDE " + amplitudeText + "°" +
+               " | BEAT ERROR " + beatError + " ms | BEAT " + beatsPerHour + " bph";
     }
 
     private double WrapIntoRange(double number, double lowerBound, double upperBound)

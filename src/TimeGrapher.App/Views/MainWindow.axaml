@@ -23,10 +23,11 @@
                    Margin="10,0,8,0"
                    VerticalAlignment="Center" />
           </Border>
-          <TextBlock Grid.Column="1"
+          <TextBlock Name="AppTitleText" Grid.Column="1"
                      Text="TimeGrapher"
                      VerticalAlignment="Center"
-                     FontSize="13"
+                     FontFamily="{StaticResource TitleFontFamily}"
+                     FontSize="16"
                      FontWeight="Bold"
                      Foreground="{DynamicResource TextPrimaryBrush}" />
           <Border Grid.Column="2" Background="Transparent" />
@@ -75,6 +76,15 @@
             </Viewbox>
           </Button>
         </StackPanel>
+
+        <TextBlock Name="Results"
+                   Grid.Column="0" Grid.ColumnSpan="2"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"
+                   FontFamily="{StaticResource TitleFontFamily}"
+                   FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource TextPrimaryBrush}" />
       </Grid>
     </Border>
 
@@ -83,21 +93,21 @@
       <TextBlock Name="StatusBarText" VerticalAlignment="Center" Margin="6,0,0,0" Text="{Binding StatusText}" />
     </Border>
 
-    <Grid ColumnDefinitions="300,*" RowDefinitions="30,*">
-      <ScrollViewer Grid.Column="0" Grid.RowSpan="2"
+    <Grid ColumnDefinitions="300,Auto,*">
+      <ScrollViewer Grid.Column="0"
                     HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Disabled"
                     Background="{DynamicResource PanelBgBrush}">
-        <StackPanel Margin="8" Spacing="8">
-          <Border BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="1" Background="{DynamicResource PanelBgBrush}" Padding="8">
-            <StackPanel Spacing="8">
+        <StackPanel Margin="8" Spacing="7">
+          <Border Background="{DynamicResource PanelBgBrush}" Padding="8,3">
+            <StackPanel Spacing="7">
               <TextBlock Name="RunParamLabel"
                          Classes="SectionHeader"
                          Text="Run Parameters" />
               <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                 <TextBlock Name="InputDeviceLabel" Grid.Column="0"
                            Margin="0,0,2,0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Input" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Input" />
                 <ComboBox Name="InputDeviceComboBox" Grid.Column="1"
                           HorizontalAlignment="Stretch"
                           MinWidth="0"
@@ -113,9 +123,9 @@
                 </ComboBox>
               </Grid>
 
-              <Grid ColumnDefinitions="98,*" RowDefinitions="32,32,32" RowSpacing="4" ColumnSpacing="8">
+              <Grid ColumnDefinitions="98,*" RowDefinitions="32,32,32" RowSpacing="3" ColumnSpacing="8">
                 <TextBlock Name="SampleRateLabel" Grid.Row="0" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Sample Rate" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Sample Rate" />
                 <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                   <ComboBox Name="SampleRatesComboBox" Grid.Column="0"
                             HorizontalAlignment="Stretch"
@@ -138,7 +148,7 @@
                 </Grid>
 
                 <TextBlock Name="GainLabel" Grid.Row="1" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Gain" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Gain" />
                 <Slider Name="MicrophoneHorizontalSlider" Grid.Row="1" Grid.Column="1"
                         VerticalAlignment="Center"
                         Height="32"
@@ -147,7 +157,7 @@
                         Minimum="0" Maximum="1000" Value="{Binding Gain, Mode=TwoWay}" Orientation="Horizontal" />
 
                 <TextBlock Name="AveragingPeriodLabel" Grid.Row="2" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Avg. Period" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Avg. Period" />
                 <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                   <ComboBox Name="AveragingPeriodComboBox" Grid.Column="0"
                             HorizontalAlignment="Stretch"
@@ -191,22 +201,25 @@
             </StackPanel>
           </Border>
 
-          <Border BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="1" Background="{DynamicResource PanelBgBrush}" Padding="8">
-            <StackPanel Spacing="8">
+          <Border Height="1" Background="{DynamicResource ChromeBorderBrush}" Margin="12,0" />
+
+          <Border Background="{DynamicResource PanelBgBrush}" Padding="8,3">
+            <StackPanel Spacing="7">
               <TextBlock Name="WatchParamLabel"
                          Classes="SectionHeader"
                          Text="Watch Parameters" />
-              <Grid ColumnDefinitions="106,*" RowDefinitions="Auto,Auto" RowSpacing="7" ColumnSpacing="8">
+              <Grid ColumnDefinitions="106,*" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                 <TextBlock Name="WatchBphLabel" Grid.Row="0" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="BPH" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="BPH" />
                 <ComboBox Name="BPHComboBox" Grid.Row="0" Grid.Column="1"
+                          HorizontalAlignment="Stretch"
                           IsEnabled="{Binding AreRunParametersEnabled}"
                           ItemsSource="{Binding BphLabels}"
                           SelectedIndex="{Binding SelectedBphIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="LiftAngleLabel" Grid.Row="1" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Lift Angle" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Lift Angle" />
                 <NumericUpDown Name="LiftAngleSpinBox" Grid.Row="1" Grid.Column="1"
                                IsEnabled="{Binding AreRunParametersEnabled}"
                                Value="{Binding LiftAngle, Mode=TwoWay}"
@@ -216,22 +229,25 @@
             </StackPanel>
           </Border>
 
-          <Border BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="1" Background="{DynamicResource PanelBgBrush}" Padding="8">
-            <StackPanel Spacing="8">
+          <Border Height="1" Background="{DynamicResource ChromeBorderBrush}" Margin="12,0" />
+
+          <Border Background="{DynamicResource PanelBgBrush}" Padding="8,3">
+            <StackPanel Spacing="7">
               <TextBlock Name="SimParamLabel"
                          Classes="SectionHeader"
                          Text="Simulation Parameters" />
-              <Grid ColumnDefinitions="106,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="7" ColumnSpacing="8">
+              <Grid ColumnDefinitions="106,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                 <TextBlock Name="SimBphLabel" Grid.Row="0" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="BPH" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="BPH" />
                 <ComboBox Name="SimBPHComboBox" Grid.Row="0" Grid.Column="1"
+                          HorizontalAlignment="Stretch"
                           IsEnabled="{Binding AreRunParametersEnabled}"
                           ItemsSource="{Binding SimBphLabels}"
                           SelectedIndex="{Binding SelectedSimBphIndex, Mode=TwoWay}"
                           FontWeight="Bold" />
 
                 <TextBlock Name="SimErrorRateLabel" Grid.Row="1" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Error Rate" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Error Rate" />
                 <NumericUpDown Name="SimErrorRateSpinBox" Grid.Row="1" Grid.Column="1"
                                IsEnabled="{Binding AreRunParametersEnabled}"
                                Value="{Binding SimErrorRate, Mode=TwoWay}"
@@ -239,7 +255,7 @@
                                Minimum="-999" Maximum="999" Increment="1" />
 
                 <TextBlock Name="SimAmpLabel" Grid.Row="2" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Amplitude" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Amplitude" />
                 <NumericUpDown Name="SimAmplitudeSpinBox" Grid.Row="2" Grid.Column="1"
                                IsEnabled="{Binding AreRunParametersEnabled}"
                                Value="{Binding SimAmplitude, Mode=TwoWay}"
@@ -247,7 +263,7 @@
                                Minimum="100" Maximum="360" Increment="1" />
 
                 <TextBlock Name="SimBeatErrorLabel" Grid.Row="3" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Beat Error" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Beat Error" />
                 <NumericUpDown Name="SimBeatErrorSpinBox" Grid.Row="3" Grid.Column="1"
                                IsEnabled="{Binding AreRunParametersEnabled}"
                                Value="{Binding SimBeatError, Mode=TwoWay}"
@@ -255,31 +271,35 @@
                                Minimum="-10" Maximum="10" Increment="0.1" />
 
                 <CheckBox Name="RealisticCheckBox" Grid.Row="4" Grid.ColumnSpan="2"
+                          HorizontalAlignment="Right"
                           IsEnabled="{Binding AreRunParametersEnabled}"
                           FontWeight="Bold" Content="Realistic" IsChecked="{Binding Realistic, Mode=TwoWay}" />
               </Grid>
             </StackPanel>
           </Border>
 
-          <Border BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="1" Background="{DynamicResource PanelBgBrush}" Padding="8">
-            <StackPanel Spacing="8">
+          <Border Height="1" Background="{DynamicResource ChromeBorderBrush}" Margin="12,0" />
+
+          <Border Background="{DynamicResource PanelBgBrush}" Padding="8,3">
+            <StackPanel Spacing="7">
               <TextBlock Name="MiscLabel"
                          Classes="SectionHeader"
                          Text="Misc. Parameters" />
-              <Grid ColumnDefinitions="132,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="7" ColumnSpacing="8">
+              <Grid ColumnDefinitions="132,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                 <TextBlock Name="HighPassLabel" Grid.Row="0" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="High Pass Cutoff" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="High Pass Cutoff" />
                 <TextBox Name="HighLineEdit" Grid.Row="0" Grid.Column="1"
                          IsEnabled="{Binding AreRunParametersEnabled}"
                          Text="{Binding HighPassCutoffText, Mode=TwoWay}" />
 
                 <TextBlock Name="ScopeScaleLabel" Grid.Row="1" Grid.Column="0"
-                           VerticalAlignment="Center" FontWeight="Bold" Text="Scope Scale" />
+                           VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="Scope Scale" />
                 <NumericUpDown Name="ScopeScaleSpinBox" Grid.Row="1" Grid.Column="1"
                                Minimum="1" Maximum="8" Increment="1"
                                Value="{Binding ScopeScale, Mode=TwoWay}" />
 
                 <CheckBox Name="UseConsetCheckBox" Grid.Row="2" Grid.ColumnSpan="2"
+                          HorizontalAlignment="Right"
                           IsEnabled="{Binding AreRunParametersEnabled}"
                           FontWeight="Bold" Content="C Event Use Onset Amplitude"
                           IsChecked="{Binding UseCOnset, Mode=TwoWay}" />
@@ -289,13 +309,16 @@
         </StackPanel>
       </ScrollViewer>
 
-      <TextBlock Name="Results" Grid.Column="1" Grid.Row="0" Margin="8,0,10,0"
-                 FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                 VerticalAlignment="Center"
-                 Foreground="{DynamicResource TextPrimaryBrush}"
-                 Text="RATE ------ s/d  AMPLITUDE ---°  BEAT ERROR ---- ms BEAT ----- bph" />
+      <Border Grid.Column="1" Width="1" Margin="0,12"
+              Background="{DynamicResource ChromeBorderBrush}" />
 
-      <TabControl Name="GraphicsTabWidget" Grid.Column="1" Grid.Row="1" Margin="8,3,10,10" />
+      <TabControl Name="GraphicsTabWidget" Grid.Column="2" Margin="8,3,10,10">
+        <TabControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Rows="2" />
+          </ItemsPanelTemplate>
+        </TabControl.ItemsPanel>
+      </TabControl>
     </Grid>
     </DockPanel>
   </Grid>
