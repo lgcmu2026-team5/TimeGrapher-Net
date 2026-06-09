@@ -257,10 +257,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Keep the exact .desktop filename; ship the icon and README alongside the binary.
+          # Keep the exact .desktop filename; ship the icon, README, and installer.
           cp deploy/linux/TimeGrapher.App.desktop "$PUBLISH_DIR/TimeGrapher.App.desktop"
           cp deploy/linux/README.md "$PUBLISH_DIR/README.md"
           cp src/TimeGrapher.App/Assets/App/AppIcon-256.png "$PUBLISH_DIR/AppIcon-256.png"
+          cp deploy/linux/install.sh "$PUBLISH_DIR/install.sh"
+          # tar preserves the +x bit; set it now so the shipped installer is runnable.
+          chmod +x "$PUBLISH_DIR/install.sh"
 
       - name: Package tar.gz + checksum
         shell: bash
