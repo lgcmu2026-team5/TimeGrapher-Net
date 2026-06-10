@@ -40,6 +40,9 @@ internal sealed class SpectrogramFrameConsumer : IAnalysisFrameConsumer
 
     public void RenderFrame(AnalysisFrame frame, AnalysisTabRenderContext context)
     {
+        // The spectrogram is a Core-built pixel image (x = pixel columns of the
+        // recent window, not stream time), so the review-cursor contract does
+        // not apply; pause already freezes the image for inspection.
         _ = context;
         ObserveFrame(frame);
         if (frame.SpectrogramImageUpdated && frame.SpectrogramImage != null)

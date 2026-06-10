@@ -31,6 +31,7 @@ internal sealed class RateScopeRenderer
     private int _scopeTextsUsed;
     private readonly List<Scatter> _scopePlots = new();
     private readonly List<Scatter> _ratePlots = new();
+    private LinePlot? _scopeReviewCursor;
     private PlotThemePalette _theme = PlotThemePalette.Current;
 
     // The scope auto-follows incoming audio (scrolls its X window each frame). Once the
@@ -83,6 +84,7 @@ internal sealed class RateScopeRenderer
         ClearSeriesData(_scopeX, _scopeY);
         DropScopeMarkerPool();
         AddScopePlottables();
+        _scopeReviewCursor = AddReviewCursor(scope);
         scope.ShowLegend();
 
         Plot rate = _ratePlot.Plot;
@@ -112,6 +114,7 @@ internal sealed class RateScopeRenderer
         ClearSeriesData(_scopeX, _scopeY);
         DropScopeMarkerPool();
         AddScopePlottables();
+        _scopeReviewCursor = AddReviewCursor(scope);
         _scopePlot.Refresh();
 
         Plot rate = _ratePlot.Plot;
@@ -128,6 +131,12 @@ internal sealed class RateScopeRenderer
     {
         bool scopeUpdated = ReplaceScopeSeries(frame);
         bool rateUpdated = ReplaceRateSeries(frame);
+        // Review cursor on the waveform pane only: its x base is absolute sample
+        // ticks, so stream time maps onto it (the Multi-Filter Scope mapping).
+        // The rate pane plots a fixed beat-index ring (0..rateDataPoints), not
+        // stream time, so the review-cursor contract has no meaningful x mapping
+        // there.
+        bool cursorMoved = UpdateReviewCursor(context);
 
         if (rateUpdated)
         {
@@ -144,9 +153,53 @@ internal sealed class RateScopeRenderer
                 _scopePlot.Plot.Axes.SetLimitsX(end - width, end);
                 _scopePlot.Plot.Axes.AutoScaleY();
             }
+        }
 
+        if (scopeUpdated || cursorMoved)
+        {
             _scopePlot.Refresh();
         }
+    }
+
+    /// <summary>Review-cursor contract: a dotted marker at the scrub time on the waveform pane.</summary>
+    private bool UpdateReviewCursor(AnalysisTabRenderContext context)
+    {
+        if (_scopeReviewCursor == null)
+        {
+            return false;
+        }
+
+        bool visible = context.ReviewCursorTimeS is not null;
+        bool changed = false;
+
+        if (_scopeReviewCursor.IsVisible != visible)
+        {
+            _scopeReviewCursor.IsVisible = visible;
+            changed = true;
+        }
+
+        if (context.ReviewCursorTimeS is double timeS)
+        {
+            double x = timeS * context.SampleRate;
+            if (Math.Abs(_scopeReviewCursor.Start.X - x) > double.Epsilon)
+            {
+                _scopeReviewCursor.Line = new CoordinateLine(x, -1e6, x, 1e6);
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private LinePlot AddReviewCursor(Plot plot)
+    {
+        LinePlot cursor = plot.Add.Line(0.0, 0.0, 0.0, 0.0);
+        cursor.MarkerStyle.IsVisible = false;
+        cursor.LineWidth = 1;
+        cursor.LinePattern = LinePattern.Dotted;
+        cursor.LineColor = Color.FromARGB(_theme.TextPrimary);
+        cursor.IsVisible = false;
+        return cursor;
     }
 
     /// <summary>Resets the rate plot (top) to its configured limits.</summary>
@@ -252,6 +305,11 @@ internal sealed class RateScopeRenderer
         for (int i = 0; i < _ratePlots.Count && i < _rateSeries.Length; i++)
         {
             _ratePlots[i].MarkerColor = Color.FromARGB(ThemeColor(_rateSeries[i]));
+        }
+
+        if (_scopeReviewCursor != null)
+        {
+            _scopeReviewCursor.LineColor = Color.FromARGB(_theme.TextPrimary);
         }
     }
 
