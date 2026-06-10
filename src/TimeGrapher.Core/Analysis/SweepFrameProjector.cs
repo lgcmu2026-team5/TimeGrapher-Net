@@ -128,15 +128,18 @@ public sealed class SweepFrameProjector
         }
     }
 
-    public void AppendSnapshot(AnalysisFrame frame)
+    public void AppendSnapshot(AnalysisFrame frame, bool force = false)
     {
         if (_windowS <= 0.0)
         {
             return;
         }
 
+        // force: the drain/flush path republishes regardless of the gate (the
+        // SoundPrintFrameProjector convention), so the final kept frame always
+        // carries the freshest folded pattern.
         ulong intervalSamples = (ulong)(PublishIntervalS * _sampleRate) * (ulong)_publishIntervalScale;
-        if (_lastSeries == null || _streamEndSample - _lastPublishedSample >= intervalSamples)
+        if (force || _lastSeries == null || _streamEndSample - _lastPublishedSample >= intervalSamples)
         {
             if (_cachedX == null)
             {

@@ -41,10 +41,10 @@ public sealed class SweepFrameProjectorTests
         return pcm;
     }
 
-    private static GraphSeriesFrame Snapshot(SweepFrameProjector projector)
+    private static GraphSeriesFrame Snapshot(SweepFrameProjector projector, bool force = false)
     {
         var frame = new AnalysisFrame();
-        projector.AppendSnapshot(frame);
+        projector.AppendSnapshot(frame, force);
         return Assert.Single(frame.ScopeSeries, s => s.Id == AnalysisGraphSeries.SweepTrace);
     }
 
@@ -182,6 +182,98 @@ public sealed class SweepFrameProjectorTests
         projector.Project(Update(Array.Empty<float>(), 12000UL, measuredPeriodS: 0.12504));
 
         Assert.Equal(1.0, Snapshot(projector).Y[0]);
+    }
+
+    [Fact]
+    public void SnapshotIsSharedWithinThePublishFloorAndHidesInBetweenData()
+    {
+        // 2x window = 12000 samples; the publish floor is 50 ms = 2400 samples.
+        var projector = new SweepFrameProjector(SampleRate);
+        const int windowSamples = 12000;
+        projector.Project(Update(ImpulseBlock(windowSamples, 1.0f, 0), 0UL));
+        GraphSeriesFrame first = Snapshot(projector);
+
+        // 1000 more samples (~21 ms) with a fresh impulse: under the floor the
+        // same immutable instance re-attaches and the new bin stays hidden.
+        projector.Project(Update(ImpulseBlock(1000, 1.0f, 600), (ulong)windowSamples));
+        GraphSeriesFrame second = Snapshot(projector);
+
+        Assert.Same(first, second);
+        Assert.Equal(0.0, second.Y[BinOf(600, windowSamples)]);
+    }
+
+    [Fact]
+    public void SnapshotRebuildsWithFreshDataOnceThePublishFloorElapses()
+    {
+        var projector = new SweepFrameProjector(SampleRate);
+        const int windowSamples = 12000;
+        projector.Project(Update(ImpulseBlock(windowSamples, 1.0f, 0), 0UL));
+        GraphSeriesFrame first = Snapshot(projector);
+
+        // 3000 samples (62.5 ms) cross the 50 ms floor: a new instance
+        // publishes and carries the impulse projected meanwhile.
+        projector.Project(Update(ImpulseBlock(3000, 1.0f, 600), (ulong)windowSamples));
+        GraphSeriesFrame second = Snapshot(projector);
+
+        Assert.NotSame(first, second);
+        Assert.Equal(1.0, second.Y[BinOf(600, windowSamples)]);
+    }
+
+    [Fact]
+    public void SweepXListIsSharedAcrossRebuildsUntilARetune()
+    {
+        var projector = new SweepFrameProjector(SampleRate);
+        const int windowSamples = 12000;
+        projector.Project(Update(ImpulseBlock(windowSamples, 1.0f, 0), 0UL));
+        GraphSeriesFrame first = Snapshot(projector);
+
+        // The bin centers are bit-identical between retunes, so a rebuild
+        // re-attaches the cached X list instead of rebuilding it.
+        projector.Project(Update(ImpulseBlock(3000, 1.0f, 600), (ulong)windowSamples));
+        GraphSeriesFrame rebuilt = Snapshot(projector);
+        Assert.NotSame(first, rebuilt);
+        Assert.Same(first.X, rebuilt.X);
+
+        // A retune (different sweep multiple) invalidates the cached axis.
+        projector.SetSweepMultiple(4);
+        projector.Project(Update(Array.Empty<float>(), 15000UL));
+        GraphSeriesFrame retuned = Snapshot(projector);
+        Assert.NotSame(rebuilt.X, retuned.X);
+    }
+
+    [Fact]
+    public void PublishIntervalScaleStretchesTheFloor()
+    {
+        var projector = new SweepFrameProjector(SampleRate);
+        const int windowSamples = 12000;
+        projector.SetPublishIntervalScale(4); // deadline-ladder knob: 50 ms -> 200 ms
+        projector.Project(Update(ImpulseBlock(windowSamples, 1.0f, 0), 0UL));
+        GraphSeriesFrame first = Snapshot(projector);
+
+        // 3000 samples would clear the unscaled floor but not the stretched one.
+        projector.Project(Update(ImpulseBlock(3000, 1.0f, 600), (ulong)windowSamples));
+        Assert.Same(first, Snapshot(projector));
+
+        // 9600 samples (200 ms) since the publish clear the stretched floor.
+        projector.Project(Update(ImpulseBlock(6600, 1.0f, 0), 15000UL));
+        Assert.NotSame(first, Snapshot(projector));
+    }
+
+    [Fact]
+    public void ForcedSnapshotRebuildsRegardlessOfTheFloor()
+    {
+        // The drain/flush path force-publishes so the final kept frame - the
+        // one a paused review keeps re-rendering - carries the freshest bins.
+        var projector = new SweepFrameProjector(SampleRate);
+        const int windowSamples = 12000;
+        projector.Project(Update(ImpulseBlock(windowSamples, 1.0f, 0), 0UL));
+        GraphSeriesFrame first = Snapshot(projector);
+
+        projector.Project(Update(ImpulseBlock(1000, 1.0f, 600), (ulong)windowSamples));
+        GraphSeriesFrame forced = Snapshot(projector, force: true);
+
+        Assert.NotSame(first, forced);
+        Assert.Equal(1.0, forced.Y[BinOf(600, windowSamples)]);
     }
 
     [Fact]

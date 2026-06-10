@@ -447,10 +447,10 @@ public sealed class AnalysisWorker : IDisposable
         _spectrogramProjector.AppendSnapshot(frame, force: true);
         _beatMetricsProjector.AppendSnapshot(frame);
         _beatSegmentCapture.AppendSnapshot(frame);
-        _sweepProjector.AppendSnapshot(frame);
+        _sweepProjector.AppendSnapshot(frame, force: true);
         // The flush pass has no new raw block to filter (the drain above already
         // consumed it); republish the latest filter window on the final frame.
-        _multiFilterProjector.AppendSnapshot(frame);
+        _multiFilterProjector.AppendSnapshot(frame, force: true);
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
         frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
 

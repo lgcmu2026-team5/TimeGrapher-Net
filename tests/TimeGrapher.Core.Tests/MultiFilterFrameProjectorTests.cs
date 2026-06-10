@@ -21,10 +21,10 @@ public sealed class MultiFilterFrameProjectorTests
         AnalysisGraphSeries.FilterF3,
     };
 
-    private static AnalysisFrame Snapshot(MultiFilterFrameProjector projector)
+    private static AnalysisFrame Snapshot(MultiFilterFrameProjector projector, bool force = false)
     {
         var frame = new AnalysisFrame();
-        projector.AppendSnapshot(frame);
+        projector.AppendSnapshot(frame, force);
         return frame;
     }
 
@@ -106,6 +106,77 @@ public sealed class MultiFilterFrameProjectorTests
         Assert.Equal(0.0, first.X[0]);
         Assert.True(second.X[^1] > first.X[^1]);
         Assert.True(second.X[^1] >= SampleRate);
+    }
+
+    [Fact]
+    public void SnapshotIsSharedWithinThePublishFloorAndHidesInBetweenTicks()
+    {
+        // The publish floor is 50 ms = 2400 raw samples at 48 kHz.
+        var projector = new MultiFilterFrameProjector(SampleRate);
+        projector.ProcessSamples(AlternatingBlock(SampleRate));
+        AnalysisFrame first = Snapshot(projector);
+        GraphSeriesFrame firstF0 = Series(first, AnalysisGraphSeries.FilterF0);
+
+        // 1000 more samples (~21 ms): under the floor the same immutable
+        // instances re-attach for all four views and the new ticks stay hidden.
+        projector.ProcessSamples(AlternatingBlock(1000));
+        AnalysisFrame second = Snapshot(projector);
+
+        foreach (string id in AllIds)
+        {
+            Assert.Same(Series(first, id), Series(second, id));
+        }
+
+        Assert.True(firstF0.X[^1] < SampleRate);
+    }
+
+    [Fact]
+    public void SnapshotRebuildsWithFreshTicksOnceThePublishFloorElapses()
+    {
+        var projector = new MultiFilterFrameProjector(SampleRate);
+        projector.ProcessSamples(AlternatingBlock(SampleRate));
+        GraphSeriesFrame first = Series(Snapshot(projector), AnalysisGraphSeries.FilterF0);
+
+        // 3000 samples (62.5 ms) cross the 50 ms floor: new instances carrying
+        // the ticks filtered meanwhile.
+        projector.ProcessSamples(AlternatingBlock(3000));
+        GraphSeriesFrame second = Series(Snapshot(projector), AnalysisGraphSeries.FilterF0);
+
+        Assert.NotSame(first, second);
+        Assert.True(second.X[^1] >= SampleRate);
+    }
+
+    [Fact]
+    public void PublishIntervalScaleStretchesTheFloor()
+    {
+        var projector = new MultiFilterFrameProjector(SampleRate);
+        projector.SetPublishIntervalScale(4); // deadline-ladder knob: 50 ms -> 200 ms
+        projector.ProcessSamples(AlternatingBlock(SampleRate));
+        GraphSeriesFrame first = Series(Snapshot(projector), AnalysisGraphSeries.FilterF0);
+
+        // 3000 samples would clear the unscaled floor but not the stretched one.
+        projector.ProcessSamples(AlternatingBlock(3000));
+        Assert.Same(first, Series(Snapshot(projector), AnalysisGraphSeries.FilterF0));
+
+        // 9600 samples (200 ms) since the publish clear the stretched floor.
+        projector.ProcessSamples(AlternatingBlock(6600));
+        Assert.NotSame(first, Series(Snapshot(projector), AnalysisGraphSeries.FilterF0));
+    }
+
+    [Fact]
+    public void ForcedSnapshotRebuildsRegardlessOfTheFloor()
+    {
+        // The drain/flush path force-publishes so the final kept frame - the
+        // one a paused review keeps re-rendering - carries the freshest window.
+        var projector = new MultiFilterFrameProjector(SampleRate);
+        projector.ProcessSamples(AlternatingBlock(SampleRate));
+        GraphSeriesFrame first = Series(Snapshot(projector), AnalysisGraphSeries.FilterF0);
+
+        projector.ProcessSamples(AlternatingBlock(1000));
+        GraphSeriesFrame forced = Series(Snapshot(projector, force: true), AnalysisGraphSeries.FilterF0);
+
+        Assert.NotSame(first, forced);
+        Assert.True(forced.X[^1] >= SampleRate);
     }
 
     [Fact]

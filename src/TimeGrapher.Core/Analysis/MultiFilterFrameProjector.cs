@@ -97,7 +97,7 @@ public sealed class MultiFilterFrameProjector
         _publishIntervalScale = Math.Max(1, scale);
     }
 
-    public void AppendSnapshot(AnalysisFrame frame)
+    public void AppendSnapshot(AnalysisFrame frame, bool force = false)
     {
         TrimWindow();
         if (_windowX.Count == 0)
@@ -105,8 +105,11 @@ public sealed class MultiFilterFrameProjector
             return;
         }
 
+        // force: the drain/flush path republishes regardless of the gate (the
+        // SoundPrintFrameProjector convention), so the final kept frame always
+        // carries the freshest filter window.
         ulong intervalSamples = (ulong)(PublishIntervalS * _sampleRate) * (ulong)_publishIntervalScale;
-        if (_lastSeries == null || _sampleTicks - _lastPublishedTick >= intervalSamples)
+        if (force || _lastSeries == null || _sampleTicks - _lastPublishedTick >= intervalSamples)
         {
             var x = new List<double>(_windowX);
             var series = new GraphSeriesFrame[SeriesIds.Length];
