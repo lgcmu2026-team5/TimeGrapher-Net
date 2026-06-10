@@ -216,6 +216,75 @@ public sealed class BeatSegmentCaptureTests
     }
 
     [Fact]
+    public void Capture_SuspensionFreezesNewWindowsLanesAndVersionButCompletesOpenOnes()
+    {
+        var capture = NewCapture();
+        capture.SetSigmaAveraging(true); // Σ on: lane counts accumulate per beat
+
+        // Open one window (A at 1000); the 400 ms window is still pending.
+        Feed(capture, 0, 6000, spikes: null, AEvent(1000));
+        capture.SetCaptureSuspended(true);
+
+        // While suspended, further beats arrive and enough envelope flows for
+        // everything to complete.
+        Feed(capture, 6000, 6000, spikes: null, AEvent(7000), CEvent(9400));
+        Feed(capture, 12000, WindowSamples + 1000);
+
+        BeatSegmentsSnapshot? suspended = capture.CurrentSnapshot();
+        Assert.NotNull(suspended);
+
+        // Only the pre-suspension window completed; the suspended A opened
+        // no new window.
+        BeatSegment segment = Assert.Single(suspended!.Segments);
+        Assert.Equal(
+            (1000 - BeatSegmentCapture.PreEventMs * SamplesPerMs) / SampleRate,
+            segment.StartTimeS, 6);
+
+        // The lane counts froze with the pre-suspension beat.
+        Assert.Equal(1, suspended.Average.Lane1Count + suspended.Average.Lane2Count);
+
+        // More suspended beats and envelope: the snapshot version stays frozen
+        // (same shared instance) - nothing opens, accumulates, or completes.
+        ulong position = 12000UL + (ulong)(WindowSamples + 1000);
+        Feed(capture, position, 6000, spikes: null,
+            AEvent(position + 1000), CEvent(position + 3400));
+        Feed(capture, position + 6000, WindowSamples + 1000);
+        Assert.Same(suspended, capture.CurrentSnapshot());
+
+        // Resume: the next A opens a fresh window and completes it.
+        capture.SetCaptureSuspended(false);
+        position += 6000UL + (ulong)(WindowSamples + 1000);
+        Feed(capture, position, 6000, spikes: null, AEvent(position + 1000));
+        Feed(capture, position + 6000, WindowSamples + 1000);
+
+        BeatSegmentsSnapshot resumed = capture.CurrentSnapshot()!;
+        Assert.NotSame(suspended, resumed);
+        Assert.True(resumed.Version > suspended.Version);
+        Assert.Equal(2, resumed.Segments.Count);
+        Assert.Equal(
+            (position + 1000 - BeatSegmentCapture.PreEventMs * SamplesPerMs) / SampleRate,
+            resumed.Segments[^1].StartTimeS, 6);
+    }
+
+    [Fact]
+    public void Capture_CEventArrivingWhileSuspendedDoesNotAttachToAStalePendingWindow()
+    {
+        // The pre-suspension window's own C was missed by the detector; the
+        // first suspended-period C (its A was skipped, so its own window never
+        // opened) sits inside the stale window's 400 ms range and would attach
+        // to it without the gate - rendering a C-peak marker from another beat.
+        var capture = NewCapture();
+        Feed(capture, 0, 6000, spikes: null, AEvent(1000));
+        capture.SetCaptureSuspended(true);
+
+        Feed(capture, 6000, 6000, spikes: null, CEvent(8000));
+        Feed(capture, 12000, WindowSamples + 1000);
+
+        BeatSegment segment = Assert.Single(capture.CurrentSnapshot()!.Segments);
+        Assert.False(segment.CPeakValid);
+    }
+
+    [Fact]
     public void Snapshot_IsSharedUntilANewSegmentCompletes()
     {
         var capture = NewCapture();

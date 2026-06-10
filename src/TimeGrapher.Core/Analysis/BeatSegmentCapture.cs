@@ -165,16 +165,23 @@ public sealed class BeatSegmentCapture
 
         foreach (DetectedEventUpdate eventUpdate in update.Events)
         {
+            // Deadline-degradation: while suspended, the event stream is
+            // ignored - no NEW windows open (already-open ones complete
+            // naturally), shedding the per-beat window decimation and lane
+            // accumulation; the Beat-Noise tab simply stops advancing until
+            // pressure subsides. C events must be skipped too: a C whose own
+            // beat's window was never opened would otherwise attach to an
+            // older pending window missing its own C (AttachCEvent only
+            // requires the A to precede the C) and render a wrong C-peak
+            // marker once that window completes.
+            if (_captureSuspended)
+            {
+                continue;
+            }
+
             if (eventUpdate.Event.Type == TgEventType.A)
             {
-                // Deadline-degradation: while suspended, no NEW windows open
-                // (already-open ones complete naturally), shedding the per-beat
-                // window decimation and lane accumulation; the Beat-Noise tab
-                // simply stops advancing until pressure subsides.
-                if (!_captureSuspended)
-                {
-                    OpenSegment(eventUpdate);
-                }
+                OpenSegment(eventUpdate);
             }
             else if (eventUpdate.Event.Type == TgEventType.C)
             {
@@ -190,7 +197,8 @@ public sealed class BeatSegmentCapture
     }
 
     /// <summary>
-    /// Deadline-degradation knob: while suspended, no new segment windows open.
+    /// Deadline-degradation knob: while suspended, no new segment windows open
+    /// and stray C events are not attached to older pending windows.
     /// Thread-safe; applied on the next Project pass.
     /// </summary>
     public void SetCaptureSuspended(bool suspended)
