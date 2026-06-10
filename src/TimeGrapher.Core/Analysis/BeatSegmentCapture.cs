@@ -124,6 +124,10 @@ public sealed class BeatSegmentCapture
     private readonly float[] _laneScratch = new float[BeatNoiseAverager.LanePoints];
     private volatile bool _requestedSigma;
 
+    // Deadline-degradation knob (written by the worker's ladder): while set,
+    // no new segment windows open.
+    private volatile bool _captureSuspended;
+
     private bool _dirty;
     private ulong _version;
     private BeatSegmentsSnapshot? _snapshot;
@@ -163,7 +167,14 @@ public sealed class BeatSegmentCapture
         {
             if (eventUpdate.Event.Type == TgEventType.A)
             {
-                OpenSegment(eventUpdate);
+                // Deadline-degradation: while suspended, no NEW windows open
+                // (already-open ones complete naturally), shedding the per-beat
+                // window decimation and lane accumulation; the Beat-Noise tab
+                // simply stops advancing until pressure subsides.
+                if (!_captureSuspended)
+                {
+                    OpenSegment(eventUpdate);
+                }
             }
             else if (eventUpdate.Event.Type == TgEventType.C)
             {
@@ -185,6 +196,15 @@ public sealed class BeatSegmentCapture
     /// the small segment descriptors, never the sample buffers).
     /// Null until the first completed segment.
     /// </summary>
+    /// <summary>
+    /// Deadline-degradation knob: while suspended, no new segment windows open.
+    /// Thread-safe; applied on the next Project pass.
+    /// </summary>
+    public void SetCaptureSuspended(bool suspended)
+    {
+        _captureSuspended = suspended;
+    }
+
     public void AppendSnapshot(AnalysisFrame frame)
     {
         frame.BeatSegments = CurrentSnapshot();

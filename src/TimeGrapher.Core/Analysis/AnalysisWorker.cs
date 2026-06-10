@@ -398,8 +398,10 @@ public sealed class AnalysisWorker : IDisposable
             level 1: stop redrawing the in-progress sound-print column and the
                      spectrogram live-edge cursor
             level 2: stretch the sound-print and spectrogram publish intervals
-                     100 ms -> 400 ms
-            level 3: coarsen the scope decimation stride 2x
+                     100 ms -> 400 ms, and the sweep / multi-filter series
+                     publish floors 50 ms -> 200 ms
+            level 3: coarsen the scope decimation stride 2x and suspend new
+                     beat-segment windows (the Beat-Noise tab stops advancing)
         Idempotent per level; de-escalation restores the knobs the same way.
         Runs on the analysis thread between frames.
     */
@@ -409,7 +411,10 @@ public sealed class AnalysisWorker : IDisposable
         _spectrogramProjector.SetLivePreviewEnabled(level < 1);
         _soundPrintProjector.SetPublishIntervalScale(level < 2 ? 1 : 4);
         _spectrogramProjector.SetPublishIntervalScale(level < 2 ? 1 : 4);
+        _sweepProjector.SetPublishIntervalScale(level < 2 ? 1 : 4);
+        _multiFilterProjector.SetPublishIntervalScale(level < 2 ? 1 : 4);
         _scopeRateProjector.SetScopeStrideScale(level < 3 ? 1 : 2);
+        _beatSegmentCapture.SetCaptureSuspended(level >= 3);
     }
 
     private void DrainAndFlushInput()
