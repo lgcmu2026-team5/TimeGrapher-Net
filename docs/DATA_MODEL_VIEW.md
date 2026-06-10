@@ -290,6 +290,7 @@ AnalysisFrame "1" *-- "0..*" GraphSeriesFrame : contains scope/rate series
 AnalysisFrame "1" *-- "0..*" ScopeMarker : contains markers
 AnalysisFrame "1" *-- "1" WatchMetricsUpdate : contains metrics
 AnalysisFrame "1" o-- "0..1" PixelBuffer : contains sound image
+AnalysisFrame "1" o-- "0..1" PixelBuffer : contains spectrogram image
 AnalysisFrame "1" o-- "0..1" BeatMetricsHistorySnapshot : shares cumulative history
 AnalysisFrame "1" o-- "0..1" BeatSegmentsSnapshot : shares recent beat windows
 
@@ -316,7 +317,7 @@ BeatSegmentsSnapshot "1" *-- "1" BeatNoiseAverageSnapshot : scope 2 lane state
 | `MasterAudioBuffer` | `Core.Shared` | Shared mono float ring buffer between input workers and analysis |
 | `TgConfig`, `TgResult`, `TgEvent` | `Core.Detection` | Detector configuration, sync state, processed PCM, and tick/tock events |
 | `AnalysisFrame` | `Core.Shared` | One UI update payload produced by an analysis pass |
-| `GraphSeriesFrame`, `ScopeMarker`, `WatchMetricsUpdate`, `PixelBuffer` | `Core.Shared` | Data displayed as scope/rate graphs, markers, numeric results, and sound-print image |
+| `GraphSeriesFrame`, `ScopeMarker`, `WatchMetricsUpdate`, `PixelBuffer` | `Core.Shared` | Data displayed as scope/rate graphs, markers, numeric results, and the sound-print / spectrogram images. The spectrogram payload (`AnalysisFrame.SpectrogramImage`) is the STFT of the recent 10 s input window built by `Core.Analysis.SpectrogramFrameProjector` — x = time, y = frequency (bins 0..~12 kHz, low at the bottom), color = dB magnitude through the 64-entry inferno-like LUT — published from a fixed three-buffer pool on the sound-print cadence |
 | `BeatTimingSample`, `AmplitudeSample`, `DerivedTimingMeasures` | `Core.Shared` | Machine-readable per-beat values (rate error, signed beat error, locked BPH, amplitude, DiffTicTac/DiffPeriod/AvgPeriod) emitted per A/C event |
 | `BeatMetricsHistorySnapshot`, `MetricsHistorySeries` | `Core.Shared` (built by `Core.Metrics.BeatMetricsHistory`) | Immutable cumulative history of rate/amplitude/beat-error series plus the latest readings and locked BPH, shared across frames; survives latest-wins frame coalescing |
 | `StatsSummary` | `Core.Shared` (fed by `Core.Metrics.RunningStats`) | Running min/max/mean/population-σ since start for rate and amplitude — exact per-beat statistics independent of series decimation (Vario display) |
@@ -333,4 +334,4 @@ BeatSegmentsSnapshot "1" *-- "1" BeatNoiseAverageSnapshot : scope 2 lane state
 | 1:n | One `AnalysisRun` produces many `AnalysisFrame` objects; one `TgResult` contains many `TgEvent` objects; one `AnalysisFrame` contains many graph series and markers |
 | n:n | No native persisted many-to-many relationship exists because the app has no database and most runtime data is owned by a single run/frame |
 | Generalization / specialization | `AudioSource` specializes into live/playback/sim sources; `TgEvent` specializes into A and C events; `ScopeMarker` specializes into vertical/horizontal/text markers |
-| Aggregation / composition | `AnalysisFrame` is composed from graph series, markers, metrics, and optional sound image; `WavFile` contains format metadata and can be decoded into `WavData`; `BeatMetricsHistorySnapshot` aggregates three `MetricsHistorySeries` plus up to six `PositionSummary` rows and is shared (aggregation, not owned) by many frames; `BeatSegmentsSnapshot` is shared the same way and aggregates (not owns) up to eight `BeatSegment` windows whose samples live in the capture's pooled buffers |
+| Aggregation / composition | `AnalysisFrame` is composed from graph series, markers, metrics, and the optional sound-print / spectrogram images (each a `PixelBuffer` from its projector's fixed publish pool); `WavFile` contains format metadata and can be decoded into `WavData`; `BeatMetricsHistorySnapshot` aggregates three `MetricsHistorySeries` plus up to six `PositionSummary` rows and is shared (aggregation, not owned) by many frames; `BeatSegmentsSnapshot` is shared the same way and aggregates (not owns) up to eight `BeatSegment` windows whose samples live in the capture's pooled buffers |
