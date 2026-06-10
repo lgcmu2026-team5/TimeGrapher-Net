@@ -10,6 +10,7 @@ internal enum InfoTabKind
     ScopeSweep,
     Vario,
     BeatErrorDiag,
+    MultiFilterScope,
     Placeholder,
 }
 
@@ -43,6 +44,7 @@ internal static class InfoTabCatalog
     public const string ScopeSweepTabId = "scope-sweep";
     public const string VarioTabId = "rate-amp-stability";
     public const string BeatErrorDiagTabId = "beat-error-diag";
+    public const string MultiFilterScopeTabId = "multi-filter-scope";
 
     public const int DefaultUiRefreshIntervalMs = 33;
     public const int SoundPrintRefreshIntervalMs = 100;
@@ -85,6 +87,11 @@ internal static class InfoTabCatalog
             // Beat Error Diag plots the per-frame tic/toc rate traces and reads the
             // cumulative snapshot for its numeric panel and diagnostic rules.
             new(BeatErrorDiagTabId, "Beat Error Diag", InfoTabKind.BeatErrorDiag, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: true, BeatErrorDiagSeries),
+            // Multi-Filter Scope refills its four stacked plots from the
+            // Core-decimated filter.f0..f3 replace series; the per-series point
+            // budget lives Core-side (MultiFilterFrameProjector), so no per-frame
+            // graph-series reduction contract is declared here.
+            new(MultiFilterScopeTabId, "Multi-Filter Scope", InfoTabKind.MultiFilterScope, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
         };
 
         // Reserved placeholder tabs for features not yet built.
@@ -98,7 +105,6 @@ internal static class InfoTabCatalog
             ("escapement-analyzer", "Escapement Analyzer"),
             ("spectrogram", "Spectrogram"),
             ("waveform-compare", "Waveform Compare"),
-            ("multi-filter-scope", "Multi-Filter Scope"),
         };
 
         foreach ((string id, string title) in placeholders)

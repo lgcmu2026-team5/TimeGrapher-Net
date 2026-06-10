@@ -36,6 +36,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.ScopeSweep] = CreateScopeSweepRegistration,
             [InfoTabKind.Vario] = CreateVarioRegistration,
             [InfoTabKind.BeatErrorDiag] = CreateBeatErrorDiagRegistration,
+            [InfoTabKind.MultiFilterScope] = CreateMultiFilterScopeRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -525,6 +526,43 @@ internal sealed class InfoTabRegistry
         grid.Children.Add(resetButton);
 
         var consumer = new BeatErrorDiagFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateMultiFilterScopeRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        // Four vertically stacked plots (F0..F3 of the same signal), each under
+        // its one-line description, so the filter views compare at a glance. The
+        // raw waveform shows before beat sync, so no waiting overlay is added.
+        _ = context;
+        IReadOnlyList<MultiFilterScopeLane> lanes = MultiFilterScopeLanes.All;
+        var plots = new AvaPlot[lanes.Count];
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions(
+                string.Join(",", Enumerable.Repeat("Auto,*", lanes.Count))),
+        };
+
+        for (int i = 0; i < lanes.Count; i++)
+        {
+            var description = new TextBlock
+            {
+                Text = lanes[i].Label + " — " + lanes[i].Description,
+                FontSize = 11,
+                Opacity = 0.65,
+                Margin = new Thickness(8, 3, 8, 0),
+            };
+            plots[i] = new AvaPlot();
+            Grid.SetRow(description, 2 * i);
+            Grid.SetRow(plots[i], 2 * i + 1);
+            grid.Children.Add(description);
+            grid.Children.Add(plots[i]);
+        }
+
+        var renderer = new MultiFilterScopeRenderer(plots);
+        var consumer = new MultiFilterScopeFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 

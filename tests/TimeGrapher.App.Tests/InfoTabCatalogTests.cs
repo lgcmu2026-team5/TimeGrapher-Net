@@ -86,6 +86,16 @@ public sealed class InfoTabCatalogTests
     }
 
     [Fact]
+    public void MultiFilterScopeTabRendersFromCoreFilterSeries()
+    {
+        InfoTabDefinition tab = InfoTabCatalog.Get(InfoTabCatalog.MultiFilterScopeTabId);
+
+        Assert.Equal(InfoTabKind.MultiFilterScope, tab.Kind);
+        Assert.False(tab.UsesGraphSnapshots);
+        Assert.Empty(tab.GraphSeries);
+    }
+
+    [Fact]
     public void CatalogTracksFunctionalAndPlaceholderTabCounts()
     {
         InfoTabDefinition[] functional = InfoTabCatalog.All
@@ -94,8 +104,8 @@ public sealed class InfoTabCatalogTests
             .Where(tab => tab.Kind == InfoTabKind.Placeholder).ToArray();
 
         Assert.Equal(14, InfoTabCatalog.All.Count);
-        Assert.Equal(6, functional.Length);
-        Assert.Equal(8, placeholders.Length);
+        Assert.Equal(7, functional.Length);
+        Assert.Equal(7, placeholders.Length);
         Assert.All(placeholders, tab => Assert.Empty(tab.GraphSeries));
         Assert.All(placeholders, tab => Assert.False(tab.UsesGraphSnapshots));
     }
