@@ -168,6 +168,14 @@ public sealed class AnalysisFrame
     public IReadOnlyList<ScopeTextMarker> TextMarkers => _textMarkers;
 
     public WatchMetricsUpdate MetricsUpdate = new();
+
+    /// <summary>
+    /// Cumulative per-beat metrics history (rate / amplitude / beat error series +
+    /// derived measures). Cumulative by design: the render scheduler coalesces
+    /// frames latest-wins, so dropped intermediate frames lose nothing.
+    /// </summary>
+    public BeatMetricsHistorySnapshot? MetricsHistory;
+
     public PixelBuffer? SoundImage;
     public bool SoundImageUpdated;
 

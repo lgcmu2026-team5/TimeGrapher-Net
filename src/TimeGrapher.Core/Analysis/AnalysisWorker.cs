@@ -40,6 +40,7 @@ public sealed class AnalysisWorker : IDisposable
     private readonly DetectorMetricsEngine _pipeline;
     private readonly ScopeRateFrameProjector _scopeRateProjector;
     private readonly SoundPrintFrameProjector _soundPrintProjector;
+    private readonly BeatMetricsFrameProjector _beatMetricsProjector = new();
     private readonly AnalysisDeadlineMonitor _deadlineMonitor = new();
     private readonly float[] _inputBlock;
 
@@ -277,6 +278,7 @@ public sealed class AnalysisWorker : IDisposable
             }
             _scopeRateProjector.Project(pipelineUpdate, frame);
             _soundPrintProjector.Project(pipelineUpdate);
+            _beatMetricsProjector.Project(pipelineUpdate);
             UpdateForegroundStats(read.SamplesCopied, frame);
         }
 
@@ -287,6 +289,7 @@ public sealed class AnalysisWorker : IDisposable
 
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame);
+        _beatMetricsProjector.AppendSnapshot(frame);
 
         MasterAudioBufferSnapshot endSnapshot = _rawAudio.GetSnapshot();
         frame.AnalysisLagSamples = endSnapshot.TotalSamplesWritten > sourceSampleEnd
@@ -341,8 +344,10 @@ public sealed class AnalysisWorker : IDisposable
         DetectorMetricsBlockUpdate flushUpdate = _pipeline.Flush();
         _scopeRateProjector.Project(flushUpdate, frame);
         _soundPrintProjector.Project(flushUpdate);
+        _beatMetricsProjector.Project(flushUpdate);
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame, force: true);
+        _beatMetricsProjector.AppendSnapshot(frame);
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
         frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
 
