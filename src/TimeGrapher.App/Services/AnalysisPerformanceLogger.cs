@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using TimeGrapher.Core.Metrics;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Services;
@@ -11,15 +13,22 @@ internal sealed class AnalysisPerformanceLogger : IDisposable
     private readonly StreamWriter _writer;
     private readonly Thread _writerThread;
     private readonly object _gate = new();
+    private readonly double _ticksPerMs;
+    private readonly RunningStats _capToProcMs = new();
+    private readonly RunningStats _procToDispMs = new();
+    private readonly RunningStats _endToEndMs = new();
+    private ulong _droppedAudioSamples;
     private bool _disposed;
 
-    public AnalysisPerformanceLogger(string path)
+    public AnalysisPerformanceLogger(string path, double? ticksPerMs = null)
     {
+        _ticksPerMs = ticksPerMs ?? Stopwatch.Frequency / 1000.0;
         _writer = new StreamWriter(path, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         _writer.WriteLine(
-            "timestamp_utc,session_id,source_id,source_sample_end,sample_rate,bph,beat_period_ms," +
-            "pending_samples,analysis_lag_samples,analysis_lag_ms,processing_elapsed_ms," +
-            "deadline_level,input_overrun,input_samples_dropped,missed_beats,sync_loss_count,beat_synced");
+            "capture_to_processing_ms,processing_to_display_ms,end_to_end_latency_ms," +
+            "capture_to_processing_avg_ms,capture_to_processing_worst_ms," +
+            "processing_to_display_avg_ms,processing_to_display_worst_ms," +
+            "end_to_end_avg_ms,end_to_end_worst_ms,dropped_audio_samples,missed_beat_detections");
 
         _writerThread = new Thread(WriteLoop)
         {
@@ -29,9 +38,16 @@ internal sealed class AnalysisPerformanceLogger : IDisposable
         _writerThread.Start();
     }
 
-    public void Observe(AnalysisFrame frame)
+    public void ObserveDisplayed(AnalysisFrame frame, long displayTicks)
     {
-        AnalysisPerformanceLogEntry entry = AnalysisPerformanceLogEntry.FromFrame(frame);
+        if (frame.CaptureTimestamp <= 0 || frame.ProcessingCompletedTimestamp <= 0)
+        {
+            return;
+        }
+
+        double capToProcMs = (frame.ProcessingCompletedTimestamp - frame.CaptureTimestamp) / _ticksPerMs;
+        double procToDispMs = (displayTicks - frame.ProcessingCompletedTimestamp) / _ticksPerMs;
+        double endToEndMs = (displayTicks - frame.CaptureTimestamp) / _ticksPerMs;
 
         lock (_gate)
         {
@@ -40,6 +56,23 @@ internal sealed class AnalysisPerformanceLogger : IDisposable
                 return;
             }
 
+            _capToProcMs.Add(capToProcMs);
+            _procToDispMs.Add(procToDispMs);
+            _endToEndMs.Add(endToEndMs);
+            _droppedAudioSamples += frame.InputSamplesDropped;
+
+            var entry = new AnalysisPerformanceLogEntry(
+                capToProcMs,
+                procToDispMs,
+                endToEndMs,
+                _capToProcMs.Mean,
+                _capToProcMs.Max,
+                _procToDispMs.Mean,
+                _procToDispMs.Max,
+                _endToEndMs.Mean,
+                _endToEndMs.Max,
+                _droppedAudioSamples,
+                frame.MissedBeats);
             _entries.Add(entry);
         }
     }
@@ -74,23 +107,17 @@ internal sealed class AnalysisPerformanceLogger : IDisposable
 
     private void WriteEntry(AnalysisPerformanceLogEntry entry)
     {
-        _writer.Write(entry.TimestampUtc.ToString("O", CultureInfo.InvariantCulture));
-        Write(entry.SessionId);
-        Write(entry.SourceId);
-        Write(entry.SourceSampleEnd);
-        Write(entry.SampleRate);
-        Write(entry.Bph);
-        Write(entry.BeatPeriodMs);
-        Write(entry.PendingSamples);
-        Write(entry.AnalysisLagSamples);
-        Write(entry.AnalysisLagMs);
-        Write(entry.ProcessingElapsedMs);
-        Write(entry.DeadlineLevel);
-        Write(entry.InputOverrun ? 1 : 0);
-        Write(entry.InputSamplesDropped);
-        Write(entry.MissedBeats);
-        Write(entry.SyncLossCount);
-        Write(entry.BeatSynced ? 1 : 0);
+        _writer.Write(entry.CaptureToProcessingMs.ToString("F6", CultureInfo.InvariantCulture));
+        Write(entry.ProcessingToDisplayMs);
+        Write(entry.EndToEndLatencyMs);
+        Write(entry.CaptureToProcessingAvgMs);
+        Write(entry.CaptureToProcessingWorstMs);
+        Write(entry.ProcessingToDisplayAvgMs);
+        Write(entry.ProcessingToDisplayWorstMs);
+        Write(entry.EndToEndAvgMs);
+        Write(entry.EndToEndWorstMs);
+        Write(entry.DroppedAudioSamples);
+        Write(entry.MissedBeatDetections);
         _writer.WriteLine();
     }
 
@@ -109,61 +136,16 @@ internal sealed class AnalysisPerformanceLogger : IDisposable
         _writer.Write(value.ToString(CultureInfo.InvariantCulture));
     }
 
-    private void Write(uint value)
-    {
-        _writer.Write(',');
-        _writer.Write(value.ToString(CultureInfo.InvariantCulture));
-    }
-
-    private void Write(int value)
-    {
-        _writer.Write(',');
-        _writer.Write(value.ToString(CultureInfo.InvariantCulture));
-    }
-
     private readonly record struct AnalysisPerformanceLogEntry(
-        DateTimeOffset TimestampUtc,
-        ulong SessionId,
-        ulong SourceId,
-        ulong SourceSampleEnd,
-        int SampleRate,
-        int Bph,
-        double BeatPeriodMs,
-        ulong PendingSamples,
-        ulong AnalysisLagSamples,
-        double AnalysisLagMs,
-        double ProcessingElapsedMs,
-        int DeadlineLevel,
-        bool InputOverrun,
-        ulong InputSamplesDropped,
-        ulong MissedBeats,
-        uint SyncLossCount,
-        bool BeatSynced)
-    {
-        public static AnalysisPerformanceLogEntry FromFrame(AnalysisFrame frame)
-        {
-            int sampleRate = Math.Max(1, frame.SampleRate);
-            int bph = frame.MetricsHistory?.Bph
-                ?? (frame.MetricsUpdate.BeatTimingSampleUpdated ? frame.MetricsUpdate.BeatTimingSample.Bph : 0);
-
-            return new AnalysisPerformanceLogEntry(
-                DateTimeOffset.UtcNow,
-                frame.SessionId,
-                frame.SourceId,
-                frame.SourceSampleEnd,
-                frame.SampleRate,
-                bph,
-                bph > 0 ? 3600.0 * 1000.0 / bph : double.NaN,
-                frame.PendingSamples,
-                frame.AnalysisLagSamples,
-                frame.AnalysisLagSamples * 1000.0 / sampleRate,
-                frame.ProcessingElapsedMs,
-                frame.DeadlineDegradationLevel,
-                frame.InputOverrun,
-                frame.InputSamplesDropped,
-                frame.MissedBeats,
-                frame.SyncLossCount,
-                frame.BeatSynced);
-        }
-    }
+        double CaptureToProcessingMs,
+        double ProcessingToDisplayMs,
+        double EndToEndLatencyMs,
+        double CaptureToProcessingAvgMs,
+        double CaptureToProcessingWorstMs,
+        double ProcessingToDisplayAvgMs,
+        double ProcessingToDisplayWorstMs,
+        double EndToEndAvgMs,
+        double EndToEndWorstMs,
+        ulong DroppedAudioSamples,
+        ulong MissedBeatDetections);
 }

@@ -370,7 +370,7 @@ public sealed class AnalysisWorker : IDisposable
 
     /// <summary>
     /// Latency / missed-beat instrumentation (QA: report capture-to-processing,
-    /// processing-to-display and end-to-end latency plus dropped-block and
+    /// processing-to-display and end-to-end latency plus dropped-sample and
     /// missed-beat counts). Capture time comes from the ring buffer's write-stamp
     /// ring keyed by the frame's newest sample; the display leg is stamped by the
     /// UI when it renders the frame.

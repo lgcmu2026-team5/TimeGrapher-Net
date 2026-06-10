@@ -31,7 +31,7 @@ internal static class Program
 
         if (args.Contains("--analysis-benchmark", StringComparer.Ordinal))
         {
-            return AnalysisBenchmarkRunner.Run(args, AppStartupOptions.Current.AnalysisLogPath);
+            return AnalysisBenchmarkRunner.Run(args);
         }
 
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

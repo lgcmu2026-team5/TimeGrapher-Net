@@ -7,44 +7,62 @@ namespace TimeGrapher.App.Tests;
 public sealed class AnalysisPerformanceLoggerTests
 {
     [Fact]
-    public void ObserveWritesProcessingBudgetAndLagCsvColumns()
+    public void ObserveDisplayedWritesRequirementLatencyCsvColumns()
     {
         string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
 
-        using (var logger = new AnalysisPerformanceLogger(path))
+        using (var logger = new AnalysisPerformanceLogger(path, ticksPerMs: 1000.0))
         {
-            logger.Observe(new AnalysisFrame
+            logger.ObserveDisplayed(new AnalysisFrame
             {
-                SessionId = 7,
-                SourceId = 9,
-                SourceSampleEnd = 4096,
-                SampleRate = 48000,
-                PendingSamples = 4096,
-                AnalysisLagSamples = 480,
-                ProcessingElapsedMs = 12.345678,
-                DeadlineDegradationLevel = 2,
-                InputOverrun = true,
                 InputSamplesDropped = 96,
                 MissedBeats = 3,
-                SyncLossCount = 1,
-                BeatSynced = true,
-                MetricsHistory = new BeatMetricsHistorySnapshot
-                {
-                    Bph = 43200,
-                },
-            });
+                CaptureTimestamp = 1_000,
+                ProcessingCompletedTimestamp = 11_000,
+            }, displayTicks: 16_000);
         }
 
         string[] lines = File.ReadAllLines(path);
         File.Delete(path);
 
         Assert.Equal(
-            "timestamp_utc,session_id,source_id,source_sample_end,sample_rate,bph,beat_period_ms," +
-            "pending_samples,analysis_lag_samples,analysis_lag_ms,processing_elapsed_ms," +
-            "deadline_level,input_overrun,input_samples_dropped,missed_beats,sync_loss_count,beat_synced",
+            "capture_to_processing_ms,processing_to_display_ms,end_to_end_latency_ms," +
+            "capture_to_processing_avg_ms,capture_to_processing_worst_ms," +
+            "processing_to_display_avg_ms,processing_to_display_worst_ms," +
+            "end_to_end_avg_ms,end_to_end_worst_ms,dropped_audio_samples,missed_beat_detections",
             lines[0]);
-        Assert.EndsWith(
-            ",7,9,4096,48000,43200,83.333333,4096,480,10.000000,12.345678,2,1,96,3,1,1",
+        Assert.Equal(
+            "10.000000,5.000000,15.000000,10.000000,10.000000,5.000000,5.000000,15.000000,15.000000,96,3",
             lines[1]);
+    }
+
+    [Fact]
+    public void ObserveDisplayedReportsCumulativeAverageAndWorstCase()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+
+        using (var logger = new AnalysisPerformanceLogger(path, ticksPerMs: 1000.0))
+        {
+            logger.ObserveDisplayed(new AnalysisFrame
+            {
+                InputSamplesDropped = 3,
+                CaptureTimestamp = 1_000,
+                ProcessingCompletedTimestamp = 3_000,
+            }, displayTicks: 6_000);
+            logger.ObserveDisplayed(new AnalysisFrame
+            {
+                InputSamplesDropped = 4,
+                MissedBeats = 2,
+                CaptureTimestamp = 10_000,
+                ProcessingCompletedTimestamp = 18_000,
+            }, displayTicks: 30_000);
+        }
+
+        string[] lines = File.ReadAllLines(path);
+        File.Delete(path);
+
+        Assert.Equal(
+            "8.000000,12.000000,20.000000,5.000000,8.000000,7.500000,12.000000,12.500000,20.000000,7,2",
+            lines[2]);
     }
 }

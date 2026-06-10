@@ -260,7 +260,6 @@ public partial class MainWindow : Window
     // AnalysisFrameReady fires on the analysis thread; marshal to UI thread.
     private void OnAnalysisFrameReady(AnalysisFrame frame)
     {
-        mAnalysisPerformanceLogger?.Observe(frame);
         mFrameRenderScheduler.Enqueue(frame);
     }
 
@@ -288,6 +287,7 @@ public partial class MainWindow : Window
         // Display leg of the latency evidence: stamped after the frame rendered.
         long displayTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         mLatencyStats.Observe(frame, droppedFrames, displayTicks);
+        mAnalysisPerformanceLogger?.ObserveDisplayed(frame, displayTicks);
         if (mLatencyStats.TryFormatStatus(displayTicks) is string latencyText)
         {
             mViewModel.LatencyText = latencyText;

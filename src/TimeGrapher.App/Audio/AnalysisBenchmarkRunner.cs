@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using TimeGrapher.App.Services;
 using TimeGrapher.Core.Analysis;
 using TimeGrapher.Core.AudioIo;
 using TimeGrapher.Core.Shared;
@@ -16,15 +15,15 @@ internal static class AnalysisBenchmarkRunner
     private const int BlockSize = 4096;
     private delegate void FillBlock(Span<float> span);
 
-    public static int Run(string[] args, string? analysisLogPath)
+    public static int Run(string[] args)
     {
         string? wavPath = ParseStringOption(args, "--wav");
         return wavPath == null
-            ? RunSynthetic(args, analysisLogPath)
-            : RunWav(args, wavPath, analysisLogPath);
+            ? RunSynthetic(args)
+            : RunWav(args, wavPath);
     }
 
-    private static int RunSynthetic(string[] args, string? analysisLogPath)
+    private static int RunSynthetic(string[] args)
     {
         int bph = AudioSmokeRunner.ParsePositiveOption(args, "--bph", DefaultBph);
         int sampleRate = AudioSmokeRunner.ParsePositiveOption(args, "--rate", DefaultRate);
@@ -43,11 +42,10 @@ internal static class AnalysisBenchmarkRunner
             sampleRate,
             bph,
             totalSamples,
-            analysisLogPath,
             span => synth.Generate(span));
     }
 
-    private static int RunWav(string[] args, string wavPath, string? analysisLogPath)
+    private static int RunWav(string[] args, string wavPath)
     {
         WavData wav = WavFileReader.ReadMonoFloat(wavPath, WavAcceptanceProfile.PlaybackFloatMonoStandardRates);
         int? durationMs = ParsePositiveOptionOrNull(args, "--duration-ms");
@@ -67,7 +65,6 @@ internal static class AnalysisBenchmarkRunner
             wav.SampleRate,
             expectedBph,
             sampleCount,
-            analysisLogPath,
             span =>
             {
                 wav.Samples.AsSpan(offset, span.Length).CopyTo(span);
@@ -80,7 +77,6 @@ internal static class AnalysisBenchmarkRunner
         int sampleRate,
         int expectedBph,
         int totalSamples,
-        string? analysisLogPath,
         FillBlock fillBlock)
     {
         var rawAudio = new MasterAudioBuffer(sampleRate);
@@ -98,14 +94,9 @@ internal static class AnalysisBenchmarkRunner
             SessionId = 1,
         });
 
-        using AnalysisPerformanceLogger? logger = analysisLogPath is null
-            ? null
-            : new AnalysisPerformanceLogger(analysisLogPath);
-
         var summary = new BenchmarkSummary();
         worker.AnalysisFrameReady += frame =>
         {
-            logger?.Observe(frame);
             summary.Observe(frame);
         };
 
@@ -123,7 +114,7 @@ internal static class AnalysisBenchmarkRunner
 
         worker.CompleteInput(Timeout.InfiniteTimeSpan);
         worker.Dispose();
-        summary.Print(source, expectedBph, sampleRate, TotalDurationMs(totalSamples, sampleRate), analysisLogPath);
+        summary.Print(source, expectedBph, sampleRate, TotalDurationMs(totalSamples, sampleRate));
         return summary.FrameCount > 0 && (expectedBph <= 0 || summary.DetectedBph == expectedBph) ? 0 : 1;
     }
 
@@ -194,7 +185,7 @@ internal static class AnalysisBenchmarkRunner
             }
         }
 
-        public void Print(string source, int expectedBph, int sampleRate, int durationMs, string? analysisLogPath)
+        public void Print(string source, int expectedBph, int sampleRate, int durationMs)
         {
             _processingElapsedMs.Sort();
             double average = FrameCount == 0 ? 0.0 : _processingTotalMs / FrameCount;
@@ -224,11 +215,6 @@ internal static class AnalysisBenchmarkRunner
                 processingRatio,
                 MaxLagMs,
                 MaxDeadlineLevel));
-
-            if (analysisLogPath != null)
-            {
-                Console.WriteLine("analysis_log=" + analysisLogPath);
-            }
         }
 
         private double Percentile(double percentile)

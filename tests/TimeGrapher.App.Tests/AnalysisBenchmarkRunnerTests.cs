@@ -11,8 +11,7 @@ public sealed class AnalysisBenchmarkRunnerTests
     public void RunCompletesShortSyntheticBenchmark()
     {
         int exitCode = AnalysisBenchmarkRunner.Run(
-            new[] { "--analysis-benchmark", "--bph", "43200", "--rate", "48000", "--duration-ms", "3000" },
-            analysisLogPath: null);
+            new[] { "--analysis-benchmark", "--bph", "43200", "--rate", "48000", "--duration-ms", "3000" });
 
         Assert.Equal(0, exitCode);
     }
@@ -27,8 +26,7 @@ public sealed class AnalysisBenchmarkRunnerTests
             WriteSyntheticWav(path, bph: 43200, sampleRate: 48000, durationMs: 3000);
 
             int exitCode = AnalysisBenchmarkRunner.Run(
-                new[] { "--analysis-benchmark", "--wav", path },
-                analysisLogPath: null);
+                new[] { "--analysis-benchmark", "--wav", path });
 
             Assert.Equal(0, exitCode);
         }
