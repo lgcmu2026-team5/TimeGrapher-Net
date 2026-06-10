@@ -72,6 +72,7 @@ internal sealed class BeatNoiseScopeRenderer
     private bool _mirror;
     private int? _selectedSlot;
     private BeatSegmentsSnapshot? _lastSnapshot;
+    private double? _lastCursorTimeS;
 
     public BeatNoiseScopeRenderer(
         AvaPlot mainPlot,
@@ -113,6 +114,7 @@ internal sealed class BeatNoiseScopeRenderer
         _lastVersion = 0;
         _lastSnapshot = null;
         _selectedSlot = null;
+        _lastCursorTimeS = null;
         _liftText.Text = "LIFT —";
         _averageText.Text = BeatNoiseScopeLogic.AverageLine(BeatNoiseAverageSnapshot.Empty);
 
@@ -235,6 +237,11 @@ internal sealed class BeatNoiseScopeRenderer
         _selectedSlot = BeatNoiseScopeLogic.NextSelection(_selectedSlot, slot, snapshot.Segments.Count);
         RenderMain(snapshot);
         UpdateSelectionSpan(snapshot);
+        // The review cursor's offset is relative to the DISPLAYED segment's
+        // window start; changing the selection while paused must recompute it
+        // (no new frame arrives to do so), or the cursor stays drawn at the
+        // previous segment's offset — possibly outside the new beat entirely.
+        UpdateReviewCursor(_lastCursorTimeS);
         _mainPlot.Refresh();
         _stripPlot.Refresh();
     }
@@ -247,6 +254,7 @@ internal sealed class BeatNoiseScopeRenderer
             _lastSnapshot = snapshot;
         }
 
+        _lastCursorTimeS = context.ReviewCursorTimeS;
         bool cursorMoved = UpdateReviewCursor(context.ReviewCursorTimeS);
         if (snapshot == null || snapshot.Version == _lastVersion)
         {
