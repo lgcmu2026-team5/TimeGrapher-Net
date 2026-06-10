@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Layout;
 using TimeGrapher.App.Tabs;
 using TimeGrapher.Core.Shared;
 using Xunit;
@@ -40,8 +41,19 @@ public sealed class InfoTabRegistryTests
             registry.Registrations,
             registration => registration.Definition.Id == InfoTabCatalog.TestPositionsTabId);
         var content = Assert.IsType<Grid>(registration.TabItem.Content);
+        var buttonGrid = Assert.IsType<Grid>(content.Children[0]);
+        Button[] buttons = buttonGrid.Children.OfType<Button>().ToArray();
 
         Assert.Equal(2, content.ColumnDefinitions.Count);
+        Assert.Single(buttonGrid.ColumnDefinitions);
+        Assert.Equal(WatchPositions.Count, buttonGrid.RowDefinitions.Count);
+        Assert.Equal(WatchPositions.Count, buttons.Length);
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            Assert.Equal(i, Grid.GetRow(buttons[i]));
+            Assert.Equal(VerticalAlignment.Stretch, buttons[i].VerticalAlignment);
+        }
+
         Assert.Single(registry.Consumers, consumer => consumer.TabId == InfoTabCatalog.TestPositionsTabId);
         Assert.DoesNotContain(registry.Registrations, registration => registration.Definition.Title == "Position Seq");
     }

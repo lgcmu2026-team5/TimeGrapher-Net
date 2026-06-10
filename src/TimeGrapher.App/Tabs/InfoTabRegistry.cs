@@ -635,15 +635,14 @@ internal sealed class InfoTabRegistry
         // tagging and the measured values for those positions together.
         IReadOnlyList<WatchPosition> positions = WatchPositions.All;
         var buttons = new Button[positions.Count];
-        int rows = (positions.Count + 1) / 2;
         var buttonGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("Auto", rows))),
-            Margin = new Thickness(8, 8, 4, 8),
-            MinWidth = 150,
-            MaxWidth = 180,
-            VerticalAlignment = VerticalAlignment.Top,
+            ColumnDefinitions = new ColumnDefinitions("*"),
+            RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("*", positions.Count))),
+            Margin = new Thickness(8, 8, 2, 8),
+            MinWidth = 76,
+            MaxWidth = 92,
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
 
         for (int i = 0; i < positions.Count; i++)
@@ -662,14 +661,12 @@ internal sealed class InfoTabRegistry
                 Content = shortText,
                 Classes = { "PositionButton" },
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = VerticalAlignment.Stretch,
                 Margin = new Thickness(2),
                 Padding = new Thickness(4, 3),
-                MinHeight = 32,
             };
             ToolTip.SetTip(button, $"Tag new measurements as {position.ShortName()} - {position.LongName()}");
-            Grid.SetRow(button, i / 2);
-            Grid.SetColumn(button, i % 2);
+            Grid.SetRow(button, i);
             buttons[i] = button;
             buttonGrid.Children.Add(button);
         }
@@ -723,7 +720,7 @@ internal sealed class InfoTabRegistry
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("172,*"),
+            ColumnDefinitions = new ColumnDefinitions("96,*"),
             RowDefinitions = new RowDefinitions("*"),
         };
 
