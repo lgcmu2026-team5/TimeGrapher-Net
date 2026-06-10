@@ -25,6 +25,13 @@ internal sealed class MultiFilterScopeRenderer
     private readonly Scatter?[] _scatters;
     private readonly ReviewCursorLayer?[] _cursors;
 
+    // Identity gate on the projector's shared-instance pattern: between
+    // publish-floor rebuilds (and on every paused-scrub re-route) frames
+    // re-attach the same immutable GraphSeriesFrame per lane, and a rebuild
+    // always allocates new ones — so reference equality is a correct change
+    // detector and skips the redundant copy/rescale/refresh.
+    private readonly GraphSeriesFrame?[] _lastSeries;
+
     private PlotThemePalette _theme = PlotThemePalette.Current;
     private bool _followLive = true;
 
@@ -41,6 +48,7 @@ internal sealed class MultiFilterScopeRenderer
         _y = new List<double>[_plots.Length];
         _scatters = new Scatter?[_plots.Length];
         _cursors = new ReviewCursorLayer?[_plots.Length];
+        _lastSeries = new GraphSeriesFrame?[_plots.Length];
 
         for (int i = 0; i < _plots.Length; i++)
         {
@@ -72,6 +80,7 @@ internal sealed class MultiFilterScopeRenderer
             plot.Clear();
             _x[i].Clear();
             _y[i].Clear();
+            _lastSeries[i] = null;
             ApplyPlotTheme(plot);
             plot.YLabel(MultiFilterScopeLanes.All[i].Label);
             plot.Axes.Bottom.TickLabelStyle.IsVisible = false;
@@ -109,9 +118,16 @@ internal sealed class MultiFilterScopeRenderer
     {
         for (int i = 0; i < _plots.Length; i++)
         {
-            bool updated = SeriesDataReducer.TryReplaceSeriesData(
-                SeriesDataReducer.FindSeries(frame.ScopeSeries, MultiFilterScopeLanes.All[i].SeriesId),
-                _x[i], _y[i], MultiFilterFrameProjector.FilterPointBudget);
+            GraphSeriesFrame? laneSeries = SeriesDataReducer.FindSeries(
+                frame.ScopeSeries, MultiFilterScopeLanes.All[i].SeriesId);
+            bool updated = !ReferenceEquals(laneSeries, _lastSeries[i]) &&
+                SeriesDataReducer.TryReplaceSeriesData(
+                    laneSeries, _x[i], _y[i], MultiFilterFrameProjector.FilterPointBudget);
+            if (updated)
+            {
+                _lastSeries[i] = laneSeries;
+            }
+
             bool cursorMoved = UpdateReviewCursor(i, context);
 
             if (updated && _followLive && _x[i].Count > 0)

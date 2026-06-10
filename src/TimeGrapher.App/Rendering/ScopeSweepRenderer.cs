@@ -28,6 +28,13 @@ internal sealed class ScopeSweepRenderer
     private Scatter? _sweepScatter;
     private ReviewCursorLayer? _reviewCursor;
 
+    // Identity gate on the projector's shared-instance pattern: between
+    // publish-floor rebuilds (and on every paused-scrub re-route) frames
+    // re-attach the same immutable GraphSeriesFrame, and a rebuild always
+    // allocates a new one — so reference equality is a correct change
+    // detector and skips the redundant copy/autoscale/refresh.
+    private GraphSeriesFrame? _lastSweepSeries;
+
     private PlotThemePalette _theme = PlotThemePalette.Current;
     private ulong _lastReadoutVersion;
     private bool _followLive = true;
@@ -59,6 +66,7 @@ internal sealed class ScopeSweepRenderer
         sweep.Clear();
         _sweepX.Clear();
         _sweepY.Clear();
+        _lastSweepSeries = null;
         ApplyPlotTheme(sweep);
         sweep.YLabel("Amplitude");
         sweep.XLabel("Sweep (ms)");
@@ -90,8 +98,14 @@ internal sealed class ScopeSweepRenderer
 
     public void RenderFrame(AnalysisFrame frame, AnalysisTabRenderContext context)
     {
-        bool dataUpdated = SeriesDataReducer.TryReplaceSeriesData(
-            SeriesDataReducer.FindSeries(frame.ScopeSeries, AnalysisGraphSeries.SweepTrace), _sweepX, _sweepY, SweepFrameProjector.SweepBinBudget);
+        GraphSeriesFrame? sweepSeries = SeriesDataReducer.FindSeries(frame.ScopeSeries, AnalysisGraphSeries.SweepTrace);
+        bool dataUpdated = !ReferenceEquals(sweepSeries, _lastSweepSeries) &&
+            SeriesDataReducer.TryReplaceSeriesData(sweepSeries, _sweepX, _sweepY, SweepFrameProjector.SweepBinBudget);
+        if (dataUpdated)
+        {
+            _lastSweepSeries = sweepSeries;
+        }
+
         bool cursorMoved = UpdateReviewCursor(context.ReviewCursorTimeS);
 
         if (dataUpdated && _followLive)
