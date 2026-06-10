@@ -75,7 +75,9 @@ work requests** — 점진적 저하). 패스마다 백로그를 **비트 주기
 신호로 쓰는 이유: 단일 패스 소요는 4096샘플로 바운드되어 정규화 없이는 예산과
 비교할 수 없고, 백로그가 곧 "비트당 작업 > 비트 주기"의 적분적 증상이기 때문이다.
 
-남은 검증: Pi 5 라이브 마이크 실측으로 단계별 비용 추정을 수치로 대체하는 것
+남은 검증: Pi 5 라이브 마이크 CSV(`./TimeGrapher.App --analysis-log ~/tg-analysis.csv`)와
+headless 43200 BPH benchmark CSV(`./TimeGrapher.App --analysis-benchmark --bph 43200
+--analysis-log tg-analysis.csv`)로 단계별 비용 추정을 수치로 대체하는 것
 (ARCHITECTURE_REVIEW_FIXES.md의 미완 항목과 동일).
 
 ---
@@ -105,7 +107,7 @@ work requests** — 점진적 저하). 패스마다 백로그를 **비트 주기
 | **maintain multiple copies of data** | 30초 링버퍼로 읽기/쓰기 속도 분리 + 사운드프린트 발행은 **고정 3버퍼 풀을 로테이션**하는 스냅샷 복사(발행된 버퍼는 2회의 더 새로운 발행 이후에만 재사용 → UI가 안전하게 읽는 동안 분석 스레드는 계속 갱신, 정상 상태 할당 0). 스펙트로그램 STFT 이미지 발행도 **동일한 고정 3버퍼 풀 로테이션**을 재사용한다. 비트 노이즈 세그먼트 발행도 같은 패턴: **고정 16버퍼 풀(float[1600])을 로테이션**해 비트당 윈도를 발행하고, 발행된 세그먼트는 풀이 한 바퀴 돌기 전까지 불변 계약 — UI는 최신 스냅샷의 세그먼트만 읽고 캐시하지 않는다 | `MasterAudioBuffer`, `SoundPrintFrameProjector.cs`, `SpectrogramFrameProjector.cs`, `BeatSegmentCapture.cs` | ✓ |
 | **bound execution times / manage work requests** | `AnalysisDeadlineMonitor`가 패스 백로그를 **비트 주기 단위**로 환산해 2비트 예산 초과가 지속되면 점진 저하 사다리(라이브 프리뷰 중단 → 발행 간격 확대 → stride 증가) 실행, 지속 회복 시 단계 복귀. 스펙트로그램 프로젝터도 같은 노브(라이브 에지 커서 중단, 발행 간격 4배)를 노출해 사다리 레벨 1·2에 함께 배선되어 있다. 위 "실시간 마감 예산" 절 참조 | `AnalysisDeadlineMonitor.cs`, `AnalysisWorker.cs` | ✓ |
 | **bound resource usage (장기 히스토리)** | 비트 단위 메트릭 히스토리(`BeatMetricsHistory`)를 **고정 용량 `DecimatingSeries`**에 누적 — 가득 차면 인접 포인트 쌍을 병합해 해상도를 반감(버킷 min/max 보존). 실행이 몇 시간이어도 메모리·발행 비용이 일정("1시간째 비용 = 1초째 비용"). 스냅샷은 스트림 시간 0.5초당 1회만 재구성, 그 사이 프레임은 같은 불변 인스턴스 공유. 다중 포지션 시퀀스도 `WatchPositions.Count`(10) 슬롯 배열과 스냅샷 버전 게이트로 제한된다. 누적은 Core에서 수행 — 렌더 스케줄러의 latest-wins 병합이 프레임을 폐기해도 데이터 손실 없음 | `DecimatingSeries.cs`, `BeatMetricsHistory.cs`, `MultiPositionSeqRenderer.cs` | ✓ |
-| **record/monitor (레이턴시 증거)** | QA가 요구하는 캡처→처리→표시 레이턴시를 단일 Stopwatch 시계로 계측: `MasterAudioBuffer`가 쓰기마다 (sampleEnd, ticks) 256개 스탬프 링을 유지, `AnalysisWorker`가 프레임에 `CaptureTimestamp`/`ProcessingCompletedTimestamp`를 스탬핑, UI가 렌더 직후 표시 시각을 더해 구간별 평균/최악값을 집계(`LatencyStatsTracker`, 상태바 우측 표시). 누락 비트(`WatchMetrics.MissedBeats`)·싱크 손실은 **세션 누적 카운터**로 프레임에 실려 latest-wins 병합에도 보존 | `MasterAudioBuffer.cs`, `LatencyStatsTracker.cs` | ✓ |
+| **record/monitor (레이턴시 증거)** | QA가 요구하는 캡처→처리→표시 레이턴시를 단일 Stopwatch 시계로 계측: `MasterAudioBuffer`가 쓰기마다 (sampleEnd, ticks) 256개 스탬프 링을 유지, `AnalysisWorker`가 프레임에 `CaptureTimestamp`/`ProcessingCompletedTimestamp`를 스탬핑, UI가 렌더 직후 표시 시각을 더해 구간별 평균/최악값을 집계(`LatencyStatsTracker`, 상태바 우측 표시). 누락 비트(`WatchMetrics.MissedBeats`)·싱크 손실은 **세션 누적 카운터**로 프레임에 실려 latest-wins 병합에도 보존. Pi 5 실측은 `--analysis-log <csv>` 및 `--analysis-benchmark`로 UI 병합 전 분석 프레임마다 processing elapsed, lag, BPH, beat-period budget, deadline level을 CSV로 남겨 43200 BPH(83.3 ms) 최악 예산과 직접 비교한다 | `MasterAudioBuffer.cs`, `LatencyStatsTracker.cs`, `AnalysisPerformanceLogger.cs`, `AnalysisBenchmarkRunner.cs` | ✓ |
 
 ### 가용성 (Availability) — 시작/중지 안정화와 결함 입력 처리
 

@@ -93,6 +93,7 @@ public partial class MainWindow : Window
     private readonly RunSelectionResolver mRunSelectionResolver;
     private readonly RunCommandService mRunCommandService;
     private readonly RunSessionController mRunSessionController;
+    private readonly AnalysisPerformanceLogger? mAnalysisPerformanceLogger;
 
     private readonly List<int> mInputDeviceNumbers = new();
 
@@ -118,6 +119,9 @@ public partial class MainWindow : Window
         mRecordingSessionService = new RecordingSessionService(mDialogs, new QueuedRecordingWriterFactory());
         mPlaybackFileService = new PlaybackFileService(mDialogs);
         mRunCommandService = new RunCommandService(mViewModel, new RunCommandOperations(this));
+        mAnalysisPerformanceLogger = AppStartupOptions.Current.AnalysisLogPath is string analysisLogPath
+            ? new AnalysisPerformanceLogger(analysisLogPath)
+            : null;
         mRunSessionController = new RunSessionController(
             sessionId => BuildRunSettings().ToWorkerConfig(sessionId, mWavWriter),
             Reset,
@@ -256,6 +260,7 @@ public partial class MainWindow : Window
     // AnalysisFrameReady fires on the analysis thread; marshal to UI thread.
     private void OnAnalysisFrameReady(AnalysisFrame frame)
     {
+        mAnalysisPerformanceLogger?.Observe(frame);
         mFrameRenderScheduler.Enqueue(frame);
     }
 

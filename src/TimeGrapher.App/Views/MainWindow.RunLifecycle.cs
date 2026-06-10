@@ -24,6 +24,7 @@ public partial class MainWindow
         mRunSessionController.InvalidateRunSession();
         mRunSessionController.StopInputWorker("Input");
         mRunSessionController.StopAnalysisThread();
+        mAnalysisPerformanceLogger?.Dispose();
         if (!AudioCloseCheck() && mWavWriter != null)
         {
             // Final shutdown: the retry surface is gone with the window, so give the

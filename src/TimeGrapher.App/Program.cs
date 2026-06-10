@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        AppStartupOptions.Configure(args);
+
         if (args.Contains("--smoke", StringComparer.Ordinal))
         {
             _ = BuildAvaloniaApp();
@@ -25,6 +27,11 @@ internal static class Program
         if (args.Contains("--capture-smoke", StringComparer.Ordinal))
         {
             return AudioSmokeRunner.Run(args, capture: true);
+        }
+
+        if (args.Contains("--analysis-benchmark", StringComparer.Ordinal))
+        {
+            return AnalysisBenchmarkRunner.Run(args, AppStartupOptions.Current.AnalysisLogPath);
         }
 
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
