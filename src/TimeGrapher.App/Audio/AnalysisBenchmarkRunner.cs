@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using TimeGrapher.App.Services;
 using TimeGrapher.Core.Analysis;
+using TimeGrapher.Core.AudioIo;
 using TimeGrapher.Core.Shared;
 using TimeGrapher.Core.Sim;
 
@@ -12,13 +14,75 @@ internal static class AnalysisBenchmarkRunner
     private const int DefaultRate = 192000;
     private const int DefaultDurationMs = 10000;
     private const int BlockSize = 4096;
+    private delegate void FillBlock(Span<float> span);
 
     public static int Run(string[] args, string? analysisLogPath)
+    {
+        string? wavPath = ParseStringOption(args, "--wav");
+        return wavPath == null
+            ? RunSynthetic(args, analysisLogPath)
+            : RunWav(args, wavPath, analysisLogPath);
+    }
+
+    private static int RunSynthetic(string[] args, string? analysisLogPath)
     {
         int bph = AudioSmokeRunner.ParsePositiveOption(args, "--bph", DefaultBph);
         int sampleRate = AudioSmokeRunner.ParsePositiveOption(args, "--rate", DefaultRate);
         int durationMs = AudioSmokeRunner.ParsePositiveOption(args, "--duration-ms", DefaultDurationMs);
 
+        WatchSynthStreamConfig synthConfig = WatchSynthStreamConfig.Realistic();
+        synthConfig.SampleRateHz = (uint)sampleRate;
+        synthConfig.Bph = bph;
+        synthConfig.PcmPeakAmplitude = 0.35;
+        synthConfig.NoisePeakAmplitude = 0.0;
+
+        var synth = new WatchSynthStream(synthConfig);
+        int totalSamples = (int)Math.Ceiling(sampleRate * (durationMs / 1000.0));
+        return RunBlocks(
+            "synthetic",
+            sampleRate,
+            bph,
+            totalSamples,
+            analysisLogPath,
+            span => synth.Generate(span));
+    }
+
+    private static int RunWav(string[] args, string wavPath, string? analysisLogPath)
+    {
+        WavData wav = WavFileReader.ReadMonoFloat(wavPath, WavAcceptanceProfile.PlaybackFloatMonoStandardRates);
+        int? durationMs = ParsePositiveOptionOrNull(args, "--duration-ms");
+        int sampleCount = wav.Samples.Length;
+        if (durationMs is int limitMs)
+        {
+            sampleCount = Math.Min(sampleCount, (int)Math.Ceiling(wav.SampleRate * (limitMs / 1000.0)));
+        }
+
+        int expectedBph = ParsePositiveOptionOrNull(args, "--bph")
+            ?? ParseBphFromFileName(wavPath)
+            ?? 0;
+        int offset = 0;
+
+        return RunBlocks(
+            Path.GetFileName(wavPath),
+            wav.SampleRate,
+            expectedBph,
+            sampleCount,
+            analysisLogPath,
+            span =>
+            {
+                wav.Samples.AsSpan(offset, span.Length).CopyTo(span);
+                offset += span.Length;
+            });
+    }
+
+    private static int RunBlocks(
+        string source,
+        int sampleRate,
+        int expectedBph,
+        int totalSamples,
+        string? analysisLogPath,
+        FillBlock fillBlock)
+    {
         var rawAudio = new MasterAudioBuffer(sampleRate);
         var worker = new AnalysisWorker(rawAudio, new AnalysisWorker.Config
         {
@@ -45,21 +109,13 @@ internal static class AnalysisBenchmarkRunner
             summary.Observe(frame);
         };
 
-        WatchSynthStreamConfig synthConfig = WatchSynthStreamConfig.Realistic();
-        synthConfig.SampleRateHz = (uint)sampleRate;
-        synthConfig.Bph = bph;
-        synthConfig.PcmPeakAmplitude = 0.35;
-        synthConfig.NoisePeakAmplitude = 0.0;
-
-        var synth = new WatchSynthStream(synthConfig);
         var block = new float[BlockSize];
-        int totalSamples = (int)Math.Ceiling(sampleRate * (durationMs / 1000.0));
         int remaining = totalSamples;
         while (remaining > 0)
         {
             int count = Math.Min(block.Length, remaining);
             Span<float> span = block.AsSpan(0, count);
-            synth.Generate(span);
+            fillBlock(span);
             rawAudio.WriteSamples(span);
             worker.HandleInputData();
             remaining -= count;
@@ -67,8 +123,47 @@ internal static class AnalysisBenchmarkRunner
 
         worker.CompleteInput(Timeout.InfiniteTimeSpan);
         worker.Dispose();
-        summary.Print(bph, sampleRate, durationMs, analysisLogPath);
-        return summary.FrameCount > 0 && summary.DetectedBph == bph ? 0 : 1;
+        summary.Print(source, expectedBph, sampleRate, TotalDurationMs(totalSamples, sampleRate), analysisLogPath);
+        return summary.FrameCount > 0 && (expectedBph <= 0 || summary.DetectedBph == expectedBph) ? 0 : 1;
+    }
+
+    private static string? ParseStringOption(string[] args, string name)
+    {
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            if (arg.Equals(name, StringComparison.Ordinal))
+            {
+                return i + 1 < args.Length ? args[i + 1] : null;
+            }
+
+            string prefix = name + "=";
+            if (arg.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                string value = arg[prefix.Length..];
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+        }
+
+        return null;
+    }
+
+    private static int? ParsePositiveOptionOrNull(string[] args, string name)
+    {
+        int sentinel = -1;
+        int parsed = AudioSmokeRunner.ParsePositiveOption(args, name, sentinel);
+        return parsed > 0 ? parsed : null;
+    }
+
+    private static int? ParseBphFromFileName(string path)
+    {
+        Match match = Regex.Match(Path.GetFileName(path), @"(\d+)BPH", RegexOptions.IgnoreCase);
+        return match.Success ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) : null;
+    }
+
+    private static int TotalDurationMs(int totalSamples, int sampleRate)
+    {
+        return (int)Math.Round(totalSamples * 1000.0 / Math.Max(1, sampleRate));
     }
 
     private sealed class BenchmarkSummary
@@ -99,7 +194,7 @@ internal static class AnalysisBenchmarkRunner
             }
         }
 
-        public void Print(int configuredBph, int sampleRate, int durationMs, string? analysisLogPath)
+        public void Print(string source, int expectedBph, int sampleRate, int durationMs, string? analysisLogPath)
         {
             _processingElapsedMs.Sort();
             double average = FrameCount == 0 ? 0.0 : _processingTotalMs / FrameCount;
@@ -107,11 +202,12 @@ internal static class AnalysisBenchmarkRunner
             double max = FrameCount == 0 ? 0.0 : _processingElapsedMs[^1];
             double audioDurationMs = durationMs;
             double processingRatio = audioDurationMs <= 0.0 ? 0.0 : _processingTotalMs / audioDurationMs;
-            double beatPeriodMs = 3600.0 * 1000.0 / configuredBph;
+            double beatPeriodMs = expectedBph > 0 ? 3600.0 * 1000.0 / expectedBph : 0.0;
 
             Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                "analysis_benchmark bph={0} sample_rate={1} duration_ms={2} frames={3} detected_bph={4}",
-                configuredBph,
+                "analysis_benchmark source={0} expected_bph={1} sample_rate={2} duration_ms={3} frames={4} detected_bph={5}",
+                source,
+                expectedBph,
                 sampleRate,
                 durationMs,
                 FrameCount,
