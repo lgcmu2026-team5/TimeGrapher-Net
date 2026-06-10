@@ -19,11 +19,15 @@ namespace TimeGrapher.Core.Analysis;
 ///
 /// Segment buffers rotate through a fixed pool of <see cref="SegmentPoolCount"/>
 /// float[<see cref="SegmentPoints"/>] arrays instead of allocating per beat
-/// (the SoundPrintFrameProjector publish-pool pattern): a published buffer is
-/// refilled again only after SegmentPoolCount-1 newer completions, and the
-/// render scheduler's latest-wins delivery keeps the UI within one snapshot of
-/// the newest data, so on-screen reads never touch a buffer being recycled.
-/// Published segments are immutable by contract until rotated out.
+/// (the SoundPrintFrameProjector publish-pool pattern). Reuse is gated on
+/// publication, not completion count: a buffer referenced by either of the two
+/// most recently built snapshots — or still sitting in the completed ring — is
+/// skipped by the acquire scan, because the UI renders at most one snapshot
+/// behind the newest published one and a backlog catch-up pass can complete
+/// many beats inside a single Project call (a completion-count margin alone
+/// would let such a pass refill what a routed frame is still reading). Ring
+/// (≤8) plus two snapshots (≤16) protect at most 24 of the 28 buffers, so the
+/// scan always finds a free one.
 ///
 /// The capture also drives the Scope 2 <see cref="BeatNoiseAverager"/>: the
 /// first 20 ms of every window is decimated into a reused scratch trace and
@@ -49,8 +53,12 @@ public sealed class BeatSegmentCapture
     /// <summary>Completed segments kept (the strip lane shows this many recent beats).</summary>
     public const int SegmentRingCount = 8;
 
-    /// <summary>Pooled segment buffers; must exceed the ring so published buffers recycle late.</summary>
-    public const int SegmentPoolCount = 16;
+    /// <summary>
+    /// Pooled segment buffers. Must exceed the worst-case protected set: the
+    /// completed ring (8) plus the two most recently built snapshots (8 each,
+    /// disjoint from the ring after a catch-up burst) = 24, leaving 4 free.
+    /// </summary>
+    public const int SegmentPoolCount = 28;
 
     private const double EnvelopeRingSeconds = 0.6;
 
@@ -75,6 +83,7 @@ public sealed class BeatSegmentCapture
     private struct CompletedSegment
     {
         public float[] Buffer;
+        public int PoolIndex;
         public double StartTimeS;
         public bool IsTic;
         public double AOffsetMs;
@@ -92,6 +101,11 @@ public sealed class BeatSegmentCapture
 
     private readonly float[][] _segmentPool;
     private int _nextPoolBuffer;
+
+    // Snapshot version that last published each pool buffer (0 = never).
+    // Buffers published within the last two built snapshots are protected
+    // from reuse; see the class doc.
+    private readonly ulong[] _bufferPublishedVersion = new ulong[SegmentPoolCount];
 
     private readonly PendingSegment[] _pending = new PendingSegment[PendingSlots];
     private int _pendingHead;
@@ -188,6 +202,7 @@ public sealed class BeatSegmentCapture
         for (int i = 0; i < _completedCount; i++)
         {
             CompletedSegment completed = _completed[(_completedHead + i) % SegmentRingCount];
+            _bufferPublishedVersion[completed.PoolIndex] = _version;
             segments.Add(new BeatSegment
             {
                 Samples = completed.Buffer,
@@ -350,8 +365,7 @@ public sealed class BeatSegmentCapture
 
     private void CompleteSegment(in PendingSegment pending)
     {
-        float[] buffer = _segmentPool[_nextPoolBuffer];
-        _nextPoolBuffer = (_nextPoolBuffer + 1) % SegmentPoolCount;
+        float[] buffer = AcquireSegmentBuffer(out int poolIndex);
         DecimateWindow(pending.StartSample, WindowMs, buffer);
 
         double samplesToMs = 1000.0 / _sampleRate;
@@ -377,6 +391,7 @@ public sealed class BeatSegmentCapture
         _completed[slot] = new CompletedSegment
         {
             Buffer = buffer,
+            PoolIndex = poolIndex,
             StartTimeS = pending.StartSample / (double)_sampleRate,
             IsTic = pending.IsTic,
             AOffsetMs = (pending.ASample - pending.StartSample) * samplesToMs,
@@ -387,6 +402,52 @@ public sealed class BeatSegmentCapture
             COnsetOffsetMs = cOnsetOffsetMs,
         };
         _dirty = true;
+    }
+
+    /// <summary>
+    /// Next reusable pool buffer, skipping every protected one (in the
+    /// completed ring or published by one of the two most recent snapshots).
+    /// The protected set is at most 24 of the 28 buffers (see the class doc),
+    /// so the scan always succeeds; the trailing fallback is unreachable and
+    /// only keeps the method total.
+    /// </summary>
+    private float[] AcquireSegmentBuffer(out int poolIndex)
+    {
+        for (int probe = 0; probe < SegmentPoolCount; probe++)
+        {
+            int candidate = (_nextPoolBuffer + probe) % SegmentPoolCount;
+            if (IsBufferProtected(candidate))
+            {
+                continue;
+            }
+
+            _nextPoolBuffer = (candidate + 1) % SegmentPoolCount;
+            poolIndex = candidate;
+            return _segmentPool[candidate];
+        }
+
+        poolIndex = _nextPoolBuffer;
+        _nextPoolBuffer = (_nextPoolBuffer + 1) % SegmentPoolCount;
+        return _segmentPool[poolIndex];
+    }
+
+    private bool IsBufferProtected(int poolIndex)
+    {
+        ulong published = _bufferPublishedVersion[poolIndex];
+        if (published != 0 && _version - published <= 1)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < _completedCount; i++)
+        {
+            if (_completed[(_completedHead + i) % SegmentRingCount].PoolIndex == poolIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

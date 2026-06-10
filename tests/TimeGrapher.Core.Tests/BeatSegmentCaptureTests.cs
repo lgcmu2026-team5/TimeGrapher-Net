@@ -174,28 +174,45 @@ public sealed class BeatSegmentCaptureTests
     }
 
     [Fact]
-    public void Capture_ReusesPooledBuffersAfterRotation()
+    public void Capture_NeverRefillsBuffersOfTheLastTwoSnapshotsDuringACatchUpBurst()
     {
+        // The race the publication gate closes: a backlog catch-up pass can
+        // complete many beats inside one Project call, and completion-count
+        // rotation alone would refill buffers a routed frame still displays.
         var capture = NewCapture();
-
         ulong position = FeedBeats(capture, streamPosition: 0, beats: 1, beatSamples: 6000);
-        BeatSegment first = Assert.Single(capture.CurrentSnapshot()!.Segments);
-        ReadOnlyMemory<float> firstBuffer = first.Samples;
+        BeatSegment published = Assert.Single(capture.CurrentSnapshot()!.Segments);
+        ReadOnlyMemory<float> publishedBuffer = published.Samples;
 
-        // After SegmentPoolCount further completions the pool has wrapped: the
-        // newest segment is written into the same buffer instance again.
-        FeedBeats(capture, position, beats: BeatSegmentCapture.SegmentPoolCount, beatSamples: 6000);
+        // Burst of two full pool rotations with NO intervening snapshot build.
+        FeedBeats(capture, position, beats: BeatSegmentCapture.SegmentPoolCount * 2, beatSamples: 6000);
 
-        BeatSegmentsSnapshot snapshot = capture.CurrentSnapshot()!;
-        BeatSegment newest = snapshot.Segments[^1];
-        Assert.True(firstBuffer.Equals(newest.Samples));
+        // The published snapshot's buffer was skipped for the whole burst: no
+        // segment of the new snapshot lives in that buffer instance.
+        BeatSegmentsSnapshot after = capture.CurrentSnapshot()!;
+        Assert.All(after.Segments, segment => Assert.False(publishedBuffer.Equals(segment.Samples)));
+    }
 
-        // No older segment still visible in the ring shares the recycled buffer
-        // (published segments stay immutable until rotated out of the pool).
-        for (int i = 0; i < snapshot.Segments.Count - 1; i++)
+    [Fact]
+    public void Capture_PoolStaysBoundedAcrossLongRuns()
+    {
+        // Buffers do recycle once their protecting snapshots age out: the set
+        // of distinct buffer instances ever published never exceeds the pool.
+        var capture = NewCapture();
+        var seen = new HashSet<float[]>();
+        ulong position = 0;
+        for (int round = 0; round < 12; round++)
         {
-            Assert.False(firstBuffer.Equals(snapshot.Segments[i].Samples));
+            position = FeedBeats(capture, position, beats: 6, beatSamples: 6000);
+            foreach (BeatSegment segment in capture.CurrentSnapshot()!.Segments)
+            {
+                Assert.True(System.Runtime.InteropServices.MemoryMarshal.TryGetArray(
+                    segment.Samples, out ArraySegment<float> array));
+                seen.Add(array.Array!);
+            }
         }
+
+        Assert.InRange(seen.Count, 1, BeatSegmentCapture.SegmentPoolCount);
     }
 
     [Fact]
