@@ -16,6 +16,7 @@ internal enum InfoTabKind
     MultiPositionSequence,
     BeatNoiseScope,
     EscapementAnalyzer,
+    WaveformCompare,
     Placeholder,
 }
 
@@ -55,6 +56,7 @@ internal static class InfoTabCatalog
     public const string MultiPositionSeqTabId = "multi-position-seq";
     public const string BeatNoiseScopeTabId = "beat-noise-scope";
     public const string EscapementAnalyzerTabId = "escapement-analyzer";
+    public const string WaveformCompareTabId = "waveform-compare";
 
     public const int DefaultUiRefreshIntervalMs = 33;
     public const int SoundPrintRefreshIntervalMs = 100;
@@ -123,6 +125,11 @@ internal static class InfoTabCatalog
             // labels and the onset-vs-peak repeatability panel); it declares
             // no per-frame graph-series contract.
             new(EscapementAnalyzerTabId, "Escapement Analyzer", InfoTabKind.EscapementAnalyzer, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
+            // Waveform Compare stacks the recent beats of the same cumulative
+            // BeatSegmentsSnapshot in A-aligned, peak-normalized lanes with the
+            // A / mean-C timing guides; it declares no per-frame graph-series
+            // contract.
+            new(WaveformCompareTabId, "Waveform Compare", InfoTabKind.WaveformCompare, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
         };
 
         // Reserved placeholder tabs for features not yet built.
@@ -130,7 +137,6 @@ internal static class InfoTabCatalog
         (string Id, string Title)[] placeholders =
         {
             ("spectrogram", "Spectrogram"),
-            ("waveform-compare", "Waveform Compare"),
         };
 
         foreach ((string id, string title) in placeholders)

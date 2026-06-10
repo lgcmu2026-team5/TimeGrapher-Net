@@ -44,6 +44,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.MultiPositionSequence] = CreateMultiPositionSeqRegistration,
             [InfoTabKind.BeatNoiseScope] = CreateBeatNoiseScopeRegistration,
             [InfoTabKind.EscapementAnalyzer] = CreateEscapementAnalyzerRegistration,
+            [InfoTabKind.WaveformCompare] = CreateWaveformCompareRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -998,6 +999,53 @@ internal sealed class InfoTabRegistry
 
         var renderer = new EscapementAnalyzerRenderer(markerPlot, valueTexts, context.TextFontFamily);
         var consumer = new EscapementAnalyzerFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateWaveformCompareRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        // Header numeric line (rate / beat error / BPH) above one plot that
+        // stacks the recent beats in A-aligned, peak-normalized lanes, and a
+        // one-line legend for the guide markers below.
+        var headerText = new TextBlock
+        {
+            FontSize = 12,
+            Margin = new Thickness(8, 4, 8, 2),
+        };
+        var lanePlot = new AvaPlot();
+        var explanationText = new TextBlock
+        {
+            FontSize = 11,
+            Opacity = 0.65,
+            Margin = new Thickness(8, 0, 8, 3),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Text = "Each lane is one recent beat (oldest at the bottom), normalized to its own " +
+                   "peak and aligned at the A event (x = 0). Green guide = A · red guide = mean " +
+                   "C peak of the shown beats; beats whose C strays from the guide reveal " +
+                   "spacing inconsistency.",
+        };
+
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+        };
+        Grid.SetRow(headerText, 0);
+        Grid.SetRow(lanePlot, 1);
+        Grid.SetRow(explanationText, 2);
+        grid.Children.Add(headerText);
+        grid.Children.Add(lanePlot);
+        grid.Children.Add(explanationText);
+
+        if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
+        {
+            Grid.SetRow(overlay, 1);
+            grid.Children.Add(overlay);
+        }
+
+        var renderer = new WaveformCompareRenderer(lanePlot, headerText, context.TextFontFamily);
+        var consumer = new WaveformCompareFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 
