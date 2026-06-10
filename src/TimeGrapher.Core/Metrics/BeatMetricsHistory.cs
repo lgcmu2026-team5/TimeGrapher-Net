@@ -139,8 +139,9 @@ public sealed class BeatMetricsHistory
 
     /// <summary>
     /// Clears only the per-position aggregates (live series and overall stats
-    /// keep accumulating). Intended for the planned multi-position sequence
-    /// flow, which restarts position statistics mid-run; not yet wired to UI.
+    /// keep accumulating). The multi-position sequence flow restarts position
+    /// statistics mid-run through this; analysis-thread only (the UI request
+    /// travels through the projector's volatile knob, the SetActivePosition flow).
     /// </summary>
     public void ResetPositionAggregates()
     {

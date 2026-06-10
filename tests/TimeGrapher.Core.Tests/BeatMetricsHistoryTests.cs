@@ -295,6 +295,36 @@ public sealed class BeatMetricsHistoryTests
     }
 
     [Fact]
+    public void ProjectorAppliesTheVolatileAggregateResetOnProject()
+    {
+        var projector = new BeatMetricsFrameProjector();
+        var result = new DetectorResultSnapshot(
+            TgSyncStatus.Synced, 28800, 0.125, Array.Empty<TgEvent>(),
+            Array.Empty<float>(), 0, 0UL, false, false, false, 0f, 0f, 0f, 0f);
+
+        projector.Project(new DetectorMetricsBlockUpdate(result, new List<DetectedEventUpdate>
+        {
+            new(new TgEvent { Type = TgEventType.A }, 6000.0, BeatUpdate(1, 0.125, 5.0)),
+        }));
+
+        // Requested from "another thread" between passes: the clear must apply
+        // before the next pass records, so only the post-reset beat survives.
+        projector.ResetPositionAggregates();
+        projector.Project(new DetectorMetricsBlockUpdate(result, new List<DetectedEventUpdate>
+        {
+            new(new TgEvent { Type = TgEventType.A }, 6000.0, BeatUpdate(2, 0.750, 6.0)),
+        }));
+
+        var frame = new AnalysisFrame();
+        projector.AppendSnapshot(frame);
+
+        PositionSummary summary = Assert.Single(frame.MetricsHistory!.Positions);
+        Assert.Equal(1, summary.Rate.Count); // pre-reset beat is gone
+        Assert.Equal(6.0, summary.Rate.Mean);
+        Assert.Equal(2, frame.MetricsHistory.Rate.Y.Count); // run series keeps going
+    }
+
+    [Fact]
     public void ProjectorAttachesSnapshotToFrame()
     {
         var projector = new BeatMetricsFrameProjector();

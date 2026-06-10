@@ -144,6 +144,17 @@ public sealed class AnalysisWorker : IDisposable
     }
 
     /// <summary>
+    /// Request a multi-position sequence restart: the per-position aggregates
+    /// are cleared on the analysis thread at the start of the next pass (the
+    /// SetActivePosition flow); the live series and overall statistics keep
+    /// accumulating. Callable from any thread.
+    /// </summary>
+    public void ResetPositionAggregates()
+    {
+        _beatMetricsProjector.ResetPositionAggregates();
+    }
+
+    /// <summary>
     /// Request a sound-print background recolor (e.g. on UI theme toggle). The change
     /// is applied on the analysis thread and an updated image frame is published.
     /// Callable from any thread.

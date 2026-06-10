@@ -16,6 +16,7 @@ public sealed class BeatMetricsFrameProjector
     // Written from any thread (UI position buttons), applied analysis-side at
     // the start of the next Project pass (the SweepFrameProjector knob pattern).
     private volatile int _requestedPosition = (int)WatchPosition.CH;
+    private volatile bool _positionAggregateResetRequested;
 
     /// <summary>
     /// Requests the watch test position subsequent beats are tagged with.
@@ -27,8 +28,25 @@ public sealed class BeatMetricsFrameProjector
         _requestedPosition = (int)position;
     }
 
+    /// <summary>
+    /// Requests a multi-position sequence restart: the per-position aggregates
+    /// clear on the analysis thread at the start of the next Project pass (the
+    /// SetActivePosition knob flow), so the clear never races a beat being
+    /// recorded. Thread-safe.
+    /// </summary>
+    public void ResetPositionAggregates()
+    {
+        _positionAggregateResetRequested = true;
+    }
+
     public void Project(DetectorMetricsBlockUpdate update)
     {
+        if (_positionAggregateResetRequested)
+        {
+            _positionAggregateResetRequested = false;
+            _history.ResetPositionAggregates();
+        }
+
         _history.SetActivePosition((WatchPosition)_requestedPosition);
         foreach (DetectedEventUpdate eventUpdate in update.Events)
         {
