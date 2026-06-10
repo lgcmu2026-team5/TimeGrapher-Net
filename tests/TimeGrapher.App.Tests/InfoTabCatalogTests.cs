@@ -70,8 +70,8 @@ public sealed class InfoTabCatalogTests
             .Where(tab => tab.Kind == InfoTabKind.Placeholder).ToArray();
 
         Assert.Equal(13, InfoTabCatalog.All.Count);
-        Assert.Equal(3, functional.Length);
-        Assert.Equal(10, placeholders.Length);
+        Assert.Equal(4, functional.Length);
+        Assert.Equal(9, placeholders.Length);
         Assert.All(placeholders, tab => Assert.Empty(tab.GraphSeries));
         Assert.All(placeholders, tab => Assert.False(tab.UsesGraphSnapshots));
     }

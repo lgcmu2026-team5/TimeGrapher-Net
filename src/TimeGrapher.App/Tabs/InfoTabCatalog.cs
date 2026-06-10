@@ -7,6 +7,7 @@ internal enum InfoTabKind
     RateScope,
     SoundPrint,
     TraceDisplay,
+    Vario,
     Placeholder,
 }
 
@@ -37,6 +38,7 @@ internal static class InfoTabCatalog
     public const string RateScopeTabId = "rate-scope";
     public const string SoundPrintTabId = "sound-print";
     public const string TraceDisplayTabId = "trace-display";
+    public const string VarioTabId = "rate-amp-stability";
 
     public const int DefaultUiRefreshIntervalMs = 33;
     public const int SoundPrintRefreshIntervalMs = 100;
@@ -62,6 +64,8 @@ internal static class InfoTabCatalog
             // Trace Display renders the cumulative BeatMetricsHistorySnapshot the
             // frame carries; it declares no per-frame graph-series contract.
             new(TraceDisplayTabId, "Trace", InfoTabKind.TraceDisplay, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
+            // Vario stability gauges render the running stats on the same snapshot.
+            new(VarioTabId, "Rate/Amp Stability", InfoTabKind.Vario, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
         };
 
         // Reserved placeholder tabs for features not yet built.
@@ -69,7 +73,6 @@ internal static class InfoTabCatalog
         (string Id, string Title)[] placeholders =
         {
             ("test-positions", "Test Positions"),
-            ("rate-amp-stability", "Rate/Amp Stability"),
             ("multi-position-seq", "Multi-Position Seq"),
             ("beat-noise-scope", "Beat-Noise Scope"),
             ("beat-error-diag", "Beat Error Diag"),

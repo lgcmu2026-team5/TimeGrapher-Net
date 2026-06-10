@@ -33,6 +33,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.RateScope] = CreateRateScopeRegistration,
             [InfoTabKind.SoundPrint] = CreateSoundPrintRegistration,
             [InfoTabKind.TraceDisplay] = CreateTraceDisplayRegistration,
+            [InfoTabKind.Vario] = CreateVarioRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -277,6 +278,63 @@ internal sealed class InfoTabRegistry
         grid.Children.Add(resetButton);
 
         var consumer = new TraceDisplayFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateVarioRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        TextBlock SectionHeader(string text) => new()
+        {
+            Text = text,
+            FontSize = 13,
+            Margin = new Thickness(8, 4, 8, 0),
+        };
+
+        TextBlock Readout() => new()
+        {
+            FontSize = 12,
+            Margin = new Thickness(8, 0, 8, 4),
+        };
+
+        var ratePlot = new AvaPlot();
+        var rateReadout = Readout();
+        var amplitudePlot = new AvaPlot();
+        var amplitudeReadout = Readout();
+
+        var legend = new TextBlock
+        {
+            FontSize = 11,
+            Opacity = 0.65,
+            Margin = new Thickness(8, 0, 8, 3),
+            Text = "Green band = acceptable range · blue = measured min/max · red = average · thin = current",
+        };
+
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto,*,Auto,Auto"),
+        };
+        Control[] rows =
+        {
+            SectionHeader("RATE (s/d)"), ratePlot, rateReadout,
+            SectionHeader("AMPLITUDE (°)"), amplitudePlot, amplitudeReadout,
+            legend,
+        };
+        for (int i = 0; i < rows.Length; i++)
+        {
+            Grid.SetRow(rows[i], i);
+            grid.Children.Add(rows[i]);
+        }
+
+        if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
+        {
+            Grid.SetRow(overlay, 1);
+            grid.Children.Add(overlay);
+        }
+
+        var renderer = new VarioRenderer(ratePlot, rateReadout, amplitudePlot, amplitudeReadout);
+        var consumer = new VarioFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 
