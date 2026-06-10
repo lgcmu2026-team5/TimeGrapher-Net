@@ -140,8 +140,9 @@ internal sealed class TraceDisplayRenderer
 
         _lastVersion = history.Version;
 
-        ReplaceSeries(history.Rate, _rateX, _rateY);
-        ReplaceSeries(history.Amplitude, _amplitudeX, _amplitudeY);
+        // History series are already bounded by DecimatingSeries; budget 0 = copy as-is.
+        SeriesDataReducer.ReplaceSeriesData(_rateX, _rateY, history.Rate.X, history.Rate.Y, targetPointBudget: 0);
+        SeriesDataReducer.ReplaceSeriesData(_amplitudeX, _amplitudeY, history.Amplitude.X, history.Amplitude.Y, targetPointBudget: 0);
 
         if (_followLive)
         {
@@ -154,17 +155,6 @@ internal sealed class TraceDisplayRenderer
 
         _ratePlot.Refresh();
         _amplitudePlot.Refresh();
-    }
-
-    private static void ReplaceSeries(MetricsHistorySeries source, List<double> x, List<double> y)
-    {
-        x.Clear();
-        y.Clear();
-        for (int i = 0; i < source.X.Count; i++)
-        {
-            x.Add(source.X[i]);
-            y.Add(source.Y[i]);
-        }
     }
 
     private void UpdateAlerts(BeatMetricsHistorySnapshot history)
@@ -233,11 +223,6 @@ internal sealed class TraceDisplayRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 }

@@ -200,7 +200,7 @@ internal sealed class RateScopeRenderer
         bool updated = false;
         for (int i = 0; i < _scopeSeries.Length; i++)
         {
-            GraphSeriesFrame? series = FindSeries(frame.ScopeSeries, _scopeSeries[i].Id);
+            GraphSeriesFrame? series = SeriesDataReducer.FindSeries(frame.ScopeSeries, _scopeSeries[i].Id);
             if (series == null)
             {
                 continue;
@@ -217,7 +217,7 @@ internal sealed class RateScopeRenderer
         bool updated = false;
         for (int i = 0; i < _rateSeries.Length; i++)
         {
-            GraphSeriesFrame? series = FindSeries(frame.RateSeries, _rateSeries[i].Id);
+            GraphSeriesFrame? series = SeriesDataReducer.FindSeries(frame.RateSeries, _rateSeries[i].Id);
             if (series == null)
             {
                 continue;
@@ -289,12 +289,8 @@ internal sealed class RateScopeRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
+
         plot.Legend.BackgroundColor = Color.FromARGB(_theme.ScopeBg);
         plot.Legend.FontColor = Color.FromARGB(_theme.TextPrimary);
         plot.Legend.OutlineColor = Color.FromARGB(_theme.ScopeGrid);
@@ -330,18 +326,6 @@ internal sealed class RateScopeRenderer
         }
     }
 
-    private static GraphSeriesFrame? FindSeries(IReadOnlyList<GraphSeriesFrame> seriesList, string id)
-    {
-        foreach (GraphSeriesFrame series in seriesList)
-        {
-            if (series.Id == id)
-            {
-                return series;
-            }
-        }
-
-        return null;
-    }
 
     private static void HideXTickLabels(Plot plot)
     {

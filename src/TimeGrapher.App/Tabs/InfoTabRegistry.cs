@@ -160,6 +160,32 @@ internal sealed class InfoTabRegistry
         return button;
     }
 
+    /// <summary>
+    /// Accent alert banner shared by the alerting tabs (hidden until the
+    /// renderer sets a message); the background binds to the theme accent so
+    /// it recolors with the chrome.
+    /// </summary>
+    private static Border CreateAlertBanner(out TextBlock alertText)
+    {
+        var text = new TextBlock
+        {
+            Foreground = Avalonia.Media.Brushes.White,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        };
+        var banner = new Border
+        {
+            Padding = new Thickness(8, 3),
+            IsVisible = false,
+            Child = text,
+        };
+        banner.Bind(
+            Border.BackgroundProperty,
+            banner.GetResourceObservable("ChromeAccentBrush"));
+        alertText = text;
+        return banner;
+    }
+
     private static InfoTabRegistration CreateRegistration(
         InfoTabDefinition definition,
         InfoTabFactoryContext context)
@@ -197,26 +223,8 @@ internal sealed class InfoTabRegistry
 
         var renderer = new RateScopeRenderer(scopePlot, ratePlot, context.TextFontFamily);
 
-        // A per-plot "Reset View" button, pinned to the top-right of its own plot row.
-        Button MakeResetButton(int row, Action onClick)
-        {
-            var button = new Button
-            {
-                Content = "Reset View",
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 6, 10, 0),
-                Padding = new Thickness(8, 2, 8, 2),
-                FontSize = 11,
-            };
-            ToolTip.SetTip(button, "Reset this graph's view");
-            button.Click += (_, _) => onClick();
-            Grid.SetRow(button, row);
-            return button;
-        }
-
-        grid.Children.Add(MakeResetButton(0, renderer.ResetRateView));
-        grid.Children.Add(MakeResetButton(1, renderer.ResetScopeView));
+        grid.Children.Add(CreatePinnedResetViewButton("Reset this graph's view", row: 0, renderer.ResetRateView));
+        grid.Children.Add(CreatePinnedResetViewButton("Reset this graph's view", row: 1, renderer.ResetScopeView));
 
         var consumer = new RateScopeFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
@@ -250,21 +258,8 @@ internal sealed class InfoTabRegistry
         var ratePlot = new AvaPlot();
         var amplitudePlot = new AvaPlot();
 
-        var alertText = new TextBlock
-        {
-            Foreground = Avalonia.Media.Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-        };
-        var alertBanner = new Border
-        {
-            Padding = new Thickness(8, 3),
-            IsVisible = false,
-            Child = alertText,
-        };
-        alertBanner.Bind(
-            Border.BackgroundProperty,
-            alertBanner.GetResourceObservable("ChromeAccentBrush"));
+        Border alertBanner = CreateAlertBanner(out TextBlock alertText);
+
 
         var summaryText = new TextBlock
         {
@@ -304,19 +299,7 @@ internal sealed class InfoTabRegistry
 
         var renderer = new TraceDisplayRenderer(ratePlot, amplitudePlot, alertBanner, alertText, summaryText);
 
-        var resetButton = new Button
-        {
-            Content = "Reset View",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 6, 10, 0),
-            Padding = new Thickness(8, 2, 8, 2),
-            FontSize = 11,
-        };
-        ToolTip.SetTip(resetButton, "Re-enable live auto-scaling on both graphs");
-        resetButton.Click += (_, _) => renderer.ResetView();
-        Grid.SetRow(resetButton, 1);
-        grid.Children.Add(resetButton);
+        grid.Children.Add(CreatePinnedResetViewButton("Re-enable live auto-scaling on both graphs", row: 1, renderer.ResetView));
 
         var consumer = new TraceDisplayFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
@@ -478,21 +461,8 @@ internal sealed class InfoTabRegistry
     {
         var tracePlot = new AvaPlot();
 
-        var alertText = new TextBlock
-        {
-            Foreground = Avalonia.Media.Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-        };
-        var alertBanner = new Border
-        {
-            Padding = new Thickness(8, 3),
-            IsVisible = false,
-            Child = alertText,
-        };
-        alertBanner.Bind(
-            Border.BackgroundProperty,
-            alertBanner.GetResourceObservable("ChromeAccentBrush"));
+        Border alertBanner = CreateAlertBanner(out TextBlock alertText);
+
 
         // Numeric panel: label/value cells for the plan readings (rate,
         // amplitude, beat error, BPH) on the top row and the derived
@@ -558,19 +528,7 @@ internal sealed class InfoTabRegistry
 
         var renderer = new BeatErrorDiagRenderer(tracePlot, alertBanner, alertText, valueTexts);
 
-        var resetButton = new Button
-        {
-            Content = "Reset View",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 6, 10, 0),
-            Padding = new Thickness(8, 2, 8, 2),
-            FontSize = 11,
-        };
-        ToolTip.SetTip(resetButton, "Reset the trace view to its configured limits");
-        resetButton.Click += (_, _) => renderer.ResetView();
-        Grid.SetRow(resetButton, 2);
-        grid.Children.Add(resetButton);
+        grid.Children.Add(CreatePinnedResetViewButton("Reset the trace view to its configured limits", row: 2, renderer.ResetView));
 
         var consumer = new BeatErrorDiagFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
@@ -659,19 +617,7 @@ internal sealed class InfoTabRegistry
 
         var renderer = new LongTermPerfRenderer(ratePlot, amplitudePlot, beatErrorPlot, footerText);
 
-        var resetButton = new Button
-        {
-            Content = "Reset View",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 6, 10, 0),
-            Padding = new Thickness(8, 2, 8, 2),
-            FontSize = 11,
-        };
-        ToolTip.SetTip(resetButton, "Re-enable live auto-scaling on all three graphs");
-        resetButton.Click += (_, _) => renderer.ResetView();
-        Grid.SetRow(resetButton, 0);
-        grid.Children.Add(resetButton);
+        grid.Children.Add(CreatePinnedResetViewButton("Re-enable live auto-scaling on all three graphs", row: 0, renderer.ResetView));
 
         var consumer = new LongTermPerfFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
@@ -769,21 +715,8 @@ internal sealed class InfoTabRegistry
         // the X / D / vertical-vs-horizontal summary block; the accent banner
         // reports the balance-wheel unbalance hint. The renderer fills the
         // table from the cumulative snapshot's PositionSummary list.
-        var alertText = new TextBlock
-        {
-            Foreground = Avalonia.Media.Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-        };
-        var alertBanner = new Border
-        {
-            Padding = new Thickness(8, 3),
-            IsVisible = false,
-            Child = alertText,
-        };
-        alertBanner.Bind(
-            Border.BackgroundProperty,
-            alertBanner.GetResourceObservable("ChromeAccentBrush"));
+        Border alertBanner = CreateAlertBanner(out TextBlock alertText);
+
 
         var tableGrid = new Grid
         {

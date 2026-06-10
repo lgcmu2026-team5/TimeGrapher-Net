@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+using TimeGrapher.Core.Metrics;
 using TimeGrapher.Core.Shared;
 
 namespace TimeGrapher.App.Services;
@@ -18,13 +19,11 @@ internal sealed class LatencyStatsTracker
 
     private readonly double _ticksPerMs;
 
-    private long _frameCount;
-    private double _capToProcSumMs;
-    private double _capToProcMaxMs;
-    private double _procToDispSumMs;
-    private double _procToDispMaxMs;
-    private double _endToEndSumMs;
-    private double _endToEndMaxMs;
+    // One O(1) accumulator per latency leg (mean + worst case via
+    // Core.Metrics.RunningStats - the same primitive the Vario stats use).
+    private readonly RunningStats _capToProcMs = new();
+    private readonly RunningStats _procToDispMs = new();
+    private readonly RunningStats _endToEndMs = new();
     private ulong _droppedSamples;
     private ulong _coalescedFrames;
     private ulong _missedBeats;
@@ -37,17 +36,17 @@ internal sealed class LatencyStatsTracker
         _ticksPerMs = ticksPerMs ?? Stopwatch.Frequency / 1000.0;
     }
 
-    public double CapToProcAvgMs => _frameCount > 0 ? _capToProcSumMs / _frameCount : 0.0;
-    public double CapToProcMaxMs => _capToProcMaxMs;
-    public double ProcToDispAvgMs => _frameCount > 0 ? _procToDispSumMs / _frameCount : 0.0;
-    public double ProcToDispMaxMs => _procToDispMaxMs;
-    public double EndToEndAvgMs => _frameCount > 0 ? _endToEndSumMs / _frameCount : 0.0;
-    public double EndToEndMaxMs => _endToEndMaxMs;
+    public double CapToProcAvgMs => _capToProcMs.Mean;
+    public double CapToProcMaxMs => _capToProcMs.Max;
+    public double ProcToDispAvgMs => _procToDispMs.Mean;
+    public double ProcToDispMaxMs => _procToDispMs.Max;
+    public double EndToEndAvgMs => _endToEndMs.Mean;
+    public double EndToEndMaxMs => _endToEndMs.Max;
     public ulong DroppedSamples => _droppedSamples;
     public ulong CoalescedFrames => _coalescedFrames;
     public ulong MissedBeats => _missedBeats;
     public uint SyncLosses => _syncLosses;
-    public long FrameCount => _frameCount;
+    public long FrameCount => _endToEndMs.Count;
 
     /// <summary>
     /// True when any observed capture stamp was a ring-eviction lower bound:
@@ -57,10 +56,9 @@ internal sealed class LatencyStatsTracker
 
     public void Reset()
     {
-        _frameCount = 0;
-        _capToProcSumMs = _capToProcMaxMs = 0.0;
-        _procToDispSumMs = _procToDispMaxMs = 0.0;
-        _endToEndSumMs = _endToEndMaxMs = 0.0;
+        _capToProcMs.Reset();
+        _procToDispMs.Reset();
+        _endToEndMs.Reset();
         _droppedSamples = 0;
         _coalescedFrames = 0;
         _missedBeats = 0;
@@ -79,13 +77,9 @@ internal sealed class LatencyStatsTracker
             double procToDisp = (displayTicks - frame.ProcessingCompletedTimestamp) / _ticksPerMs;
             double endToEnd = (displayTicks - frame.CaptureTimestamp) / _ticksPerMs;
 
-            _frameCount++;
-            _capToProcSumMs += capToProc;
-            _capToProcMaxMs = Math.Max(_capToProcMaxMs, capToProc);
-            _procToDispSumMs += procToDisp;
-            _procToDispMaxMs = Math.Max(_procToDispMaxMs, procToDisp);
-            _endToEndSumMs += endToEnd;
-            _endToEndMaxMs = Math.Max(_endToEndMaxMs, endToEnd);
+            _capToProcMs.Add(capToProc);
+            _procToDispMs.Add(procToDisp);
+            _endToEndMs.Add(endToEnd);
         }
 
         _droppedSamples += frame.InputSamplesDropped;
@@ -100,7 +94,7 @@ internal sealed class LatencyStatsTracker
     /// </summary>
     public string? TryFormatStatus(long nowTicks)
     {
-        if (_frameCount == 0)
+        if (FrameCount == 0)
         {
             return null;
         }

@@ -296,11 +296,6 @@ internal sealed class EscapementAnalyzerRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 }

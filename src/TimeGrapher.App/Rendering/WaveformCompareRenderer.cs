@@ -215,44 +215,17 @@ internal sealed class WaveformCompareRenderer
 
     /// <summary>
     /// Fills one lane with the segment's envelope, A-aligned (x = ms from the A
-    /// onset), normalized to the segment's own peak and max-decimated to the
-    /// lane point budget (envelope-preserving, the strip-lane policy).
+    /// onset), via the shared strip-lane sampling policy.
     /// </summary>
     private static void FillLane(BeatSegment segment, double baseline, List<double> x, List<double> y)
     {
-        ReadOnlySpan<float> samples = segment.Samples.Span;
-        int stride = Math.Max(1, samples.Length / LanePointBudget);
-
-        float peak = 0f;
-        foreach (float value in samples)
-        {
-            if (value > peak)
+        EnvelopeLaneSampler.MaxDecimateNormalized(
+            segment.Samples.Span, LanePointBudget,
+            (p, _, stride, normalized) =>
             {
-                peak = value;
-            }
-        }
-
-        if (peak <= 0f)
-        {
-            peak = 1f;
-        }
-
-        int points = samples.Length / stride;
-        for (int p = 0; p < points; p++)
-        {
-            float max = samples[p * stride];
-            for (int s = 1; s < stride; s++)
-            {
-                float value = samples[p * stride + s];
-                if (value > max)
-                {
-                    max = value;
-                }
-            }
-
-            x.Add(p * stride * segment.MsPerPoint - segment.AOffsetMs);
-            y.Add(baseline + max / peak);
-        }
+                x.Add(p * stride * segment.MsPerPoint - segment.AOffsetMs);
+                y.Add(baseline + normalized);
+            });
     }
 
     private void UpdateGuides(IReadOnlyList<BeatSegment> segments, int count)
@@ -376,11 +349,6 @@ internal sealed class WaveformCompareRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 }

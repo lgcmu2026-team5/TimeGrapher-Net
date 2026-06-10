@@ -91,7 +91,7 @@ internal sealed class ScopeSweepRenderer
     public void RenderFrame(AnalysisFrame frame, AnalysisTabRenderContext context)
     {
         bool dataUpdated = SeriesDataReducer.TryReplaceSeriesData(
-            FindSweepSeries(frame), _sweepX, _sweepY, SweepFrameProjector.SweepBinBudget);
+            SeriesDataReducer.FindSeries(frame.ScopeSeries, AnalysisGraphSeries.SweepTrace), _sweepX, _sweepY, SweepFrameProjector.SweepBinBudget);
         bool cursorMoved = UpdateReviewCursor(context.ReviewCursorTimeS);
 
         if (dataUpdated && _followLive)
@@ -150,24 +150,7 @@ internal sealed class ScopeSweepRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 
-    private static GraphSeriesFrame? FindSweepSeries(AnalysisFrame frame)
-    {
-        foreach (GraphSeriesFrame series in frame.ScopeSeries)
-        {
-            if (series.Id == AnalysisGraphSeries.SweepTrace)
-            {
-                return series;
-            }
-        }
-
-        return null;
-    }
 }

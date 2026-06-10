@@ -110,7 +110,7 @@ internal sealed class MultiFilterScopeRenderer
         for (int i = 0; i < _plots.Length; i++)
         {
             bool updated = SeriesDataReducer.TryReplaceSeriesData(
-                FindSeries(frame, MultiFilterScopeLanes.All[i].SeriesId),
+                SeriesDataReducer.FindSeries(frame.ScopeSeries, MultiFilterScopeLanes.All[i].SeriesId),
                 _x[i], _y[i], MultiFilterFrameProjector.FilterPointBudget);
             bool cursorMoved = UpdateReviewCursor(i, context);
 
@@ -159,12 +159,7 @@ internal sealed class MultiFilterScopeRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 
     private void RefreshAll()
@@ -175,16 +170,4 @@ internal sealed class MultiFilterScopeRenderer
         }
     }
 
-    private static GraphSeriesFrame? FindSeries(AnalysisFrame frame, string id)
-    {
-        foreach (GraphSeriesFrame series in frame.ScopeSeries)
-        {
-            if (series.Id == id)
-            {
-                return series;
-            }
-        }
-
-        return null;
-    }
 }

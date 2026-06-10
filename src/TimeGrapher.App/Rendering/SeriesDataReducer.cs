@@ -4,6 +4,20 @@ namespace TimeGrapher.App.Rendering;
 
 internal static class SeriesDataReducer
 {
+    /// <summary>First series with the given id, or null (the shared per-tab lookup).</summary>
+    public static GraphSeriesFrame? FindSeries(IReadOnlyList<GraphSeriesFrame> seriesList, string id)
+    {
+        foreach (GraphSeriesFrame series in seriesList)
+        {
+            if (series.Id == id)
+            {
+                return series;
+            }
+        }
+
+        return null;
+    }
+
     public static bool TryReplaceSeriesData(
         GraphSeriesFrame? series,
         List<double> targetX,

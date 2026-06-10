@@ -332,41 +332,16 @@ internal sealed class BeatNoiseScopeRenderer
                 continue;
             }
 
-            // Compress each segment into its slot: max-decimated to the strip
-            // budget, normalized to the strip's own peak so every beat's shape
-            // reads at a glance.
-            ReadOnlySpan<float> samples = snapshot.Segments[index].Samples.Span;
-            int stride = Math.Max(1, samples.Length / StripPointBudget);
-            float peak = 0f;
-            foreach (float value in samples)
-            {
-                if (value > peak)
+            // Compress each segment into its slot via the shared strip-lane
+            // sampling policy (max-decimate + per-segment peak normalization).
+            int stripSlot = slot;
+            EnvelopeLaneSampler.MaxDecimateNormalized(
+                snapshot.Segments[index].Samples.Span, StripPointBudget,
+                (p, points, _, normalized) =>
                 {
-                    peak = value;
-                }
-            }
-
-            if (peak <= 0f)
-            {
-                peak = 1f;
-            }
-
-            int points = samples.Length / stride;
-            for (int p = 0; p < points; p++)
-            {
-                float max = samples[p * stride];
-                for (int s = 1; s < stride; s++)
-                {
-                    float value = samples[p * stride + s];
-                    if (value > max)
-                    {
-                        max = value;
-                    }
-                }
-
-                x.Add(slot + 0.03 + 0.94 * p / (points - 1.0));
-                y.Add(0.05 + 0.9 * max / peak);
-            }
+                    x.Add(stripSlot + 0.03 + 0.94 * p / (points - 1.0));
+                    y.Add(0.05 + 0.9 * normalized);
+                });
         }
 
         UpdateSelectionSpan(snapshot);
@@ -541,12 +516,7 @@ internal sealed class BeatNoiseScopeRenderer
 
     private void ApplyPlotTheme(Plot plot)
     {
-        plot.FigureBackground.Color = Color.FromARGB(_theme.SurfaceBg);
-        plot.DataBackground.Color = Color.FromARGB(_theme.ScopeBg);
-        plot.Axes.Color(Color.FromARGB(_theme.TextPrimary));
-        plot.Axes.FrameColor(Color.FromARGB(_theme.ScopeGrid));
-        plot.Grid.MajorLineColor = Color.FromARGB(_theme.ScopeGrid);
-        plot.Grid.MinorLineColor = Color.FromARGB(_theme.ScopeGrid);
+        PlotThemeHelper.Apply(plot, _theme);
     }
 
     private void RefreshAll()
