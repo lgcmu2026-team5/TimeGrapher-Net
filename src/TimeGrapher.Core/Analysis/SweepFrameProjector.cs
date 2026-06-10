@@ -49,6 +49,19 @@ public sealed class SweepFrameProjector
     // discipline as AnalysisWorker._latestBeatPeriodS.
     private double _lastKnownBeatPeriodS;
 
+    /// <summary>
+    /// Stream-time floor between series rebuilds (the MultiFilterFrameProjector
+    /// throttle): the X list is bit-identical between retunes and Y changes
+    /// continuously, so frames in between re-attach the same immutable series.
+    /// </summary>
+    public const double PublishIntervalS = 0.05;
+
+    private volatile int _publishIntervalScale = 1;
+    private List<double>? _cachedX;
+    private GraphSeriesFrame? _lastSeries;
+    private ulong _lastPublishedSample;
+    private ulong _streamEndSample;
+
     public SweepFrameProjector(int sampleRate)
     {
         _sampleRate = sampleRate;
@@ -65,6 +78,15 @@ public sealed class SweepFrameProjector
         _requestedSweepMultiple = Math.Max(1, sweepMultiple);
     }
 
+    /// <summary>
+    /// Deadline-degradation knob: multiplies the publish floor (1 = normal).
+    /// Thread-safe; applied on the next AppendSnapshot.
+    /// </summary>
+    public void SetPublishIntervalScale(int scale)
+    {
+        _publishIntervalScale = Math.Max(1, scale);
+    }
+
     public void Project(DetectorMetricsBlockUpdate update)
     {
         DetectorResultSnapshot result = update.Result;
@@ -74,6 +96,7 @@ public sealed class SweepFrameProjector
             return;
         }
 
+        _streamEndSample = result.ProcessedPcmStartSample + (ulong)result.ProcessedPcmLen;
         double windowSamples = _windowS * _sampleRate;
         double binsPerSample = SweepBinBudget / windowSamples;
         for (int i = 0; i < result.ProcessedPcmLen; i++)
@@ -112,22 +135,36 @@ public sealed class SweepFrameProjector
             return;
         }
 
-        double binWidthMs = _windowS * 1000.0 / SweepBinBudget;
-        var x = new List<double>(SweepBinBudget);
-        var y = new List<double>(SweepBinBudget);
-        for (int i = 0; i < SweepBinBudget; i++)
+        ulong intervalSamples = (ulong)(PublishIntervalS * _sampleRate) * (ulong)_publishIntervalScale;
+        if (_lastSeries == null || _streamEndSample - _lastPublishedSample >= intervalSamples)
         {
-            x.Add((i + 0.5) * binWidthMs);
-            y.Add(_binValues[i]);
+            if (_cachedX == null)
+            {
+                double binWidthMs = _windowS * 1000.0 / SweepBinBudget;
+                _cachedX = new List<double>(SweepBinBudget);
+                for (int i = 0; i < SweepBinBudget; i++)
+                {
+                    _cachedX.Add((i + 0.5) * binWidthMs);
+                }
+            }
+
+            var y = new List<double>(SweepBinBudget);
+            for (int i = 0; i < SweepBinBudget; i++)
+            {
+                y.Add(_binValues[i]);
+            }
+
+            _lastSeries = new GraphSeriesFrame
+            {
+                Id = AnalysisGraphSeries.SweepTrace,
+                X = _cachedX,
+                Y = y,
+                Replace = true,
+            };
+            _lastPublishedSample = _streamEndSample;
         }
 
-        frame.AddScopeSeries(new GraphSeriesFrame
-        {
-            Id = AnalysisGraphSeries.SweepTrace,
-            X = x,
-            Y = y,
-            Replace = true,
-        });
+        frame.AddScopeSeries(_lastSeries);
     }
 
     private void RetuneWindow(DetectorResultSnapshot result)
@@ -155,5 +192,9 @@ public sealed class SweepFrameProjector
         _windowS = candidate;
         Array.Clear(_binValues);
         Array.Fill(_binPass, -1L);
+        // The window length changed: the cached X axis and the shared series
+        // are stale, and the cleared pattern should publish immediately.
+        _cachedX = null;
+        _lastSeries = null;
     }
 }

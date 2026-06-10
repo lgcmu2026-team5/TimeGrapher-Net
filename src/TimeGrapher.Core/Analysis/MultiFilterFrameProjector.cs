@@ -22,6 +22,17 @@ public sealed class MultiFilterFrameProjector
     public const int WindowSeconds = 2;
     public const int FilterPointBudget = 2000;
 
+    /// <summary>
+    /// Stream-time floor between series rebuilds. The five rebuilt lists
+    /// (~80 KB) used to be allocated per analysis pass — at the Pi's 192 kHz
+    /// pass cadence (~94/s) that was megabytes per second of analysis-thread
+    /// churn, most of it discarded by the latest-wins UI coalescer. Frames in
+    /// between re-attach the same immutable series instances (the rate-series
+    /// sharing pattern); at 48 kHz the pass cadence (~85 ms) already exceeds
+    /// the floor, so behavior there is unchanged.
+    /// </summary>
+    public const double PublishIntervalS = 0.05;
+
     private static readonly string[] SeriesIds =
     {
         AnalysisGraphSeries.FilterF0,
@@ -35,6 +46,12 @@ public sealed class MultiFilterFrameProjector
     private readonly List<double> _windowX = new();
     private readonly List<double>[] _windowY;
     private ulong _sampleTicks;
+
+    // Deadline-degradation knob (analysis thread applies it; written from the
+    // worker's ladder): stretches the publish floor under sustained pressure.
+    private volatile int _publishIntervalScale = 1;
+    private GraphSeriesFrame[]? _lastSeries;
+    private ulong _lastPublishedTick;
 
     public MultiFilterFrameProjector(int sampleRate)
     {
@@ -71,6 +88,15 @@ public sealed class MultiFilterFrameProjector
         }
     }
 
+    /// <summary>
+    /// Deadline-degradation knob: multiplies the publish floor (1 = normal).
+    /// Thread-safe; applied on the next AppendSnapshot.
+    /// </summary>
+    public void SetPublishIntervalScale(int scale)
+    {
+        _publishIntervalScale = Math.Max(1, scale);
+    }
+
     public void AppendSnapshot(AnalysisFrame frame)
     {
         TrimWindow();
@@ -79,16 +105,29 @@ public sealed class MultiFilterFrameProjector
             return;
         }
 
-        var x = new List<double>(_windowX);
-        for (int i = 0; i < SeriesIds.Length; i++)
+        ulong intervalSamples = (ulong)(PublishIntervalS * _sampleRate) * (ulong)_publishIntervalScale;
+        if (_lastSeries == null || _sampleTicks - _lastPublishedTick >= intervalSamples)
         {
-            frame.AddScopeSeries(new GraphSeriesFrame
+            var x = new List<double>(_windowX);
+            var series = new GraphSeriesFrame[SeriesIds.Length];
+            for (int i = 0; i < SeriesIds.Length; i++)
             {
-                Id = SeriesIds[i],
-                X = x,
-                Y = new List<double>(_windowY[i]),
-                Replace = true,
-            });
+                series[i] = new GraphSeriesFrame
+                {
+                    Id = SeriesIds[i],
+                    X = x,
+                    Y = new List<double>(_windowY[i]),
+                    Replace = true,
+                };
+            }
+
+            _lastSeries = series;
+            _lastPublishedTick = _sampleTicks;
+        }
+
+        foreach (GraphSeriesFrame series in _lastSeries)
+        {
+            frame.AddScopeSeries(series);
         }
     }
 
