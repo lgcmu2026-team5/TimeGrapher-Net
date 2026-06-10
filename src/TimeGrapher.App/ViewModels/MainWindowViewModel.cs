@@ -45,6 +45,7 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _useCOnset;
     private int _sweepMultiple = 2;
     private int _selectedPositionIndex; // 0 = WatchPosition.CH (dial up)
+    private bool _sigmaAveraging;
 
     public MainWindowViewModel(
         Func<Task> startAsync,
@@ -243,6 +244,13 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _sweepMultiple;
         set => SetProperty(ref _sweepMultiple, value);
+    }
+
+    /// <summary>Beat-Noise Scope 2 Σ averaging on/off (forwarded to the analysis worker).</summary>
+    public bool SigmaAveraging
+    {
+        get => _sigmaAveraging;
+        set => SetProperty(ref _sigmaAveraging, value);
     }
 
     /// <summary>Active watch test position as a <see cref="WatchPosition"/> ordinal (0 = CH, dial up).</summary>

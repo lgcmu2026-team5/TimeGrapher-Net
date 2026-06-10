@@ -321,6 +321,11 @@ public partial class MainWindow : Window
         {
             mRunSessionController.SetActivePosition((WatchPosition)mViewModel.SelectedPositionIndex);
         }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.SigmaAveraging))
+        {
+            mRunSessionController.SetSigmaAveraging(mViewModel.SigmaAveraging);
+        }
     }
 
     // Multi-Position Sequence "Reset Sequence": clear the running worker's

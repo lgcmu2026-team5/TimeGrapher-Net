@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -41,6 +42,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.LongTermPerformance] = CreateLongTermPerfRegistration,
             [InfoTabKind.TestPositions] = CreateTestPositionsRegistration,
             [InfoTabKind.MultiPositionSequence] = CreateMultiPositionSeqRegistration,
+            [InfoTabKind.BeatNoiseScope] = CreateBeatNoiseScopeRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -800,6 +802,140 @@ internal sealed class InfoTabRegistry
 
         var renderer = new MultiPositionSeqRenderer(tableGrid, alertBanner, alertText, summaryText);
         var consumer = new MultiPositionSeqFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateBeatNoiseScopeRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        // Scope 1: toolbar (range / MIRROR / Σ / lift angle), the enlarged
+        // selected-or-latest beat, and the frameless strip lane of the 8 most
+        // recent beats. Scope 2: the two averaged lanes above their readout.
+        var mainPlot = new AvaPlot();
+        var stripPlot = new AvaPlot
+        {
+            Height = 72,
+        };
+        var averagePlot = new AvaPlot();
+
+        var liftText = new TextBlock
+        {
+            Text = "LIFT —",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0),
+        };
+        var averageText = new TextBlock
+        {
+            FontSize = 12,
+            Margin = new Thickness(8, 2),
+        };
+
+        var renderer = new BeatNoiseScopeRenderer(mainPlot, stripPlot, averagePlot, liftText, averageText);
+
+        var toolbar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            Margin = new Thickness(8, 4),
+        };
+
+        // 20 / 200 / 400 ms range selector; the active range renders disabled
+        // (the Scope Sweep 1x/2x/4x button pattern).
+        int[] ranges = { 20, 200, 400 };
+        var rangeButtons = new Button[ranges.Length];
+
+        void UpdateRangeButtonStates()
+        {
+            for (int i = 0; i < rangeButtons.Length; i++)
+            {
+                rangeButtons[i].IsEnabled = ranges[i] != renderer.RangeMs;
+            }
+        }
+
+        for (int i = 0; i < ranges.Length; i++)
+        {
+            int rangeMs = ranges[i];
+            var button = new Button
+            {
+                Content = rangeMs + " ms",
+                Padding = new Thickness(8, 2, 8, 2),
+                FontSize = 11,
+            };
+            ToolTip.SetTip(button, $"Show the first {rangeMs} ms of the beat window");
+            button.Click += (_, _) =>
+            {
+                renderer.SetRangeMs(rangeMs);
+                UpdateRangeButtonStates();
+            };
+            rangeButtons[i] = button;
+            toolbar.Children.Add(button);
+        }
+
+        UpdateRangeButtonStates();
+
+        var mirrorToggle = new ToggleButton
+        {
+            Content = "MIRROR",
+            Padding = new Thickness(8, 2, 8, 2),
+            FontSize = 11,
+            Margin = new Thickness(8, 0, 0, 0),
+        };
+        ToolTip.SetTip(mirrorToggle, "Mirror the rectified envelope below zero (bipolar waveform look)");
+        mirrorToggle.IsCheckedChanged += (_, _) => renderer.SetMirror(mirrorToggle.IsChecked == true);
+        toolbar.Children.Add(mirrorToggle);
+
+        // Σ writes the shared SigmaAveraging view-model property; MainWindow
+        // forwards the change to the running analysis worker (the
+        // SetSweepMultiple flow). Display state comes back via the snapshot.
+        var sigmaToggle = new ToggleButton
+        {
+            Content = "Σ",
+            Padding = new Thickness(10, 2, 10, 2),
+            FontSize = 11,
+            Margin = new Thickness(8, 0, 0, 0),
+            IsChecked = context.ViewModel?.SigmaAveraging == true,
+        };
+        ToolTip.SetTip(sigmaToggle, "Average 50 + 50 beat noises into the two Scope 2 traces");
+        sigmaToggle.IsCheckedChanged += (_, _) =>
+        {
+            if (context.ViewModel is { } viewModel)
+            {
+                viewModel.SigmaAveraging = sigmaToggle.IsChecked == true;
+            }
+        };
+        toolbar.Children.Add(sigmaToggle);
+        toolbar.Children.Add(liftText);
+
+        // Strip-lane hit test: the plot is frameless, so the slot follows from
+        // the press position's horizontal fraction across the control.
+        stripPlot.PointerPressed += (_, e) =>
+        {
+            if (stripPlot.Bounds.Width > 0)
+            {
+                renderer.SelectStripAtFraction(e.GetPosition(stripPlot).X / stripPlot.Bounds.Width);
+            }
+        };
+
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,2*,Auto,*,Auto"),
+        };
+        Control[] rows = { toolbar, mainPlot, stripPlot, averagePlot, averageText };
+        for (int i = 0; i < rows.Length; i++)
+        {
+            Grid.SetRow(rows[i], i);
+            grid.Children.Add(rows[i]);
+        }
+
+        if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
+        {
+            Grid.SetRow(overlay, 1);
+            grid.Children.Add(overlay);
+        }
+
+        var consumer = new BeatNoiseScopeFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 

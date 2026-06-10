@@ -28,6 +28,7 @@ internal sealed class RunSessionController : IDisposable
     private ulong _runSessionToken;
     private int? _sweepMultiple;
     private WatchPosition? _activePosition;
+    private bool? _sigmaAveraging;
 
     public RunSessionController(
         Func<ulong, AnalysisWorker.Config> createAnalysisConfig,
@@ -184,6 +185,16 @@ internal sealed class RunSessionController : IDisposable
     }
 
     /// <summary>
+    /// Forwards the Beat-Noise Scope 2 Σ averaging mode to the running analysis
+    /// worker and remembers it so later runs start with the user's selection.
+    /// </summary>
+    public void SetSigmaAveraging(bool enabled)
+    {
+        _sigmaAveraging = enabled;
+        _analysisWorker?.SetSigmaAveraging(enabled);
+    }
+
+    /// <summary>
     /// Clears the running analysis worker's per-position aggregates so a new
     /// multi-position sequence starts (no-op when idle — a fresh run begins
     /// with empty aggregates anyway).
@@ -228,6 +239,10 @@ internal sealed class RunSessionController : IDisposable
         if (_activePosition is WatchPosition activePosition)
         {
             _analysisWorker.SetActivePosition(activePosition);
+        }
+        if (_sigmaAveraging is bool sigmaAveraging)
+        {
+            _analysisWorker.SetSigmaAveraging(sigmaAveraging);
         }
         _analysisWorker.AnalysisFrameReady += _onAnalysisFrameReady;
         _analysisWorker.Start();
