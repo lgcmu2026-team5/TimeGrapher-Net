@@ -62,6 +62,20 @@ public sealed class InfoTabCatalogTests
     }
 
     [Fact]
+    public void BeatErrorDiagTabDeclaresRateTraceContract()
+    {
+        InfoTabDefinition tab = InfoTabCatalog.Get(InfoTabCatalog.BeatErrorDiagTabId);
+
+        Assert.Equal(InfoTabKind.BeatErrorDiag, tab.Kind);
+        Assert.True(tab.UsesGraphSnapshots);
+        Assert.Equal(
+            new[] { AnalysisGraphSeries.RateTic, AnalysisGraphSeries.RateToc },
+            tab.GraphSeries.Select(series => series.Id).ToArray());
+        Assert.All(tab.GraphSeries, series =>
+            Assert.Equal(GraphSeriesRenderMode.Points, series.RenderMode));
+    }
+
+    [Fact]
     public void CatalogTracksFunctionalAndPlaceholderTabCounts()
     {
         InfoTabDefinition[] functional = InfoTabCatalog.All
@@ -70,8 +84,8 @@ public sealed class InfoTabCatalogTests
             .Where(tab => tab.Kind == InfoTabKind.Placeholder).ToArray();
 
         Assert.Equal(13, InfoTabCatalog.All.Count);
-        Assert.Equal(4, functional.Length);
-        Assert.Equal(9, placeholders.Length);
+        Assert.Equal(5, functional.Length);
+        Assert.Equal(8, placeholders.Length);
         Assert.All(placeholders, tab => Assert.Empty(tab.GraphSeries));
         Assert.All(placeholders, tab => Assert.False(tab.UsesGraphSnapshots));
     }

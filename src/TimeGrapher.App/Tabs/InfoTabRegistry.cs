@@ -34,6 +34,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.SoundPrint] = CreateSoundPrintRegistration,
             [InfoTabKind.TraceDisplay] = CreateTraceDisplayRegistration,
             [InfoTabKind.Vario] = CreateVarioRegistration,
+            [InfoTabKind.BeatErrorDiag] = CreateBeatErrorDiagRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -335,6 +336,110 @@ internal sealed class InfoTabRegistry
 
         var renderer = new VarioRenderer(ratePlot, rateReadout, amplitudePlot, amplitudeReadout);
         var consumer = new VarioFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateBeatErrorDiagRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        var tracePlot = new AvaPlot();
+
+        var alertText = new TextBlock
+        {
+            Foreground = Avalonia.Media.Brushes.White,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+        };
+        var alertBanner = new Border
+        {
+            Padding = new Thickness(8, 3),
+            IsVisible = false,
+            Child = alertText,
+        };
+        alertBanner.Bind(
+            Border.BackgroundProperty,
+            alertBanner.GetResourceObservable("ChromeAccentBrush"));
+
+        // Numeric panel: label/value cells for the plan readings (rate,
+        // amplitude, beat error, BPH) on the top row and the derived
+        // DiffTicTac / DiffPeriod / AvgPeriod measures on the bottom row.
+        var valueTexts = new TextBlock[BeatErrorReadout.Labels.Length];
+        var readoutGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*,*,*"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            Margin = new Thickness(8, 4, 8, 2),
+        };
+        for (int i = 0; i < BeatErrorReadout.Labels.Length; i++)
+        {
+            var label = new TextBlock
+            {
+                Text = BeatErrorReadout.Labels[i],
+                FontSize = 11,
+                Opacity = 0.65,
+            };
+            var value = new TextBlock
+            {
+                Text = VarioReadout.Missing,
+                FontSize = 15,
+            };
+            valueTexts[i] = value;
+
+            var cell = new StackPanel { Margin = new Thickness(0, 2, 12, 2) };
+            cell.Children.Add(label);
+            cell.Children.Add(value);
+            Grid.SetRow(cell, i / 4);
+            Grid.SetColumn(cell, i % 4);
+            readoutGrid.Children.Add(cell);
+        }
+
+        var explanationText = new TextBlock
+        {
+            FontSize = 11,
+            Opacity = 0.65,
+            Margin = new Thickness(8, 0, 8, 3),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Text = "Tic/toc traces: horizontal = on time; a positive reading slopes the trace upward. " +
+                   "Separation between the two traces = beat error; a slope past 45° flags a major fault.",
+        };
+
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto"),
+        };
+        Grid.SetRow(alertBanner, 0);
+        Grid.SetRow(readoutGrid, 1);
+        Grid.SetRow(tracePlot, 2);
+        Grid.SetRow(explanationText, 3);
+        grid.Children.Add(alertBanner);
+        grid.Children.Add(readoutGrid);
+        grid.Children.Add(tracePlot);
+        grid.Children.Add(explanationText);
+
+        if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
+        {
+            Grid.SetRow(overlay, 2);
+            grid.Children.Add(overlay);
+        }
+
+        var renderer = new BeatErrorDiagRenderer(tracePlot, alertBanner, alertText, valueTexts);
+
+        var resetButton = new Button
+        {
+            Content = "Reset View",
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 6, 10, 0),
+            Padding = new Thickness(8, 2, 8, 2),
+            FontSize = 11,
+        };
+        ToolTip.SetTip(resetButton, "Reset the trace view to its configured limits");
+        resetButton.Click += (_, _) => renderer.ResetView();
+        Grid.SetRow(resetButton, 2);
+        grid.Children.Add(resetButton);
+
+        var consumer = new BeatErrorDiagFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 
