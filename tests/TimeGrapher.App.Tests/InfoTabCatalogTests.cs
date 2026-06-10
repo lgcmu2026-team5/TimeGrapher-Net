@@ -156,6 +156,17 @@ public sealed class InfoTabCatalogTests
     }
 
     [Fact]
+    public void SpectrogramTabRendersFromFrameImageNotGraphSeries()
+    {
+        InfoTabDefinition tab = InfoTabCatalog.Get(InfoTabCatalog.SpectrogramTabId);
+
+        Assert.Equal(InfoTabKind.Spectrogram, tab.Kind);
+        Assert.Equal(InfoTabCatalog.SoundPrintRefreshIntervalMs, tab.RefreshIntervalMs);
+        Assert.False(tab.UsesGraphSnapshots);
+        Assert.Empty(tab.GraphSeries);
+    }
+
+    [Fact]
     public void CatalogTracksFunctionalAndPlaceholderTabCounts()
     {
         InfoTabDefinition[] functional = InfoTabCatalog.All
@@ -164,9 +175,7 @@ public sealed class InfoTabCatalogTests
             .Where(tab => tab.Kind == InfoTabKind.Placeholder).ToArray();
 
         Assert.Equal(14, InfoTabCatalog.All.Count);
-        Assert.Equal(13, functional.Length);
-        Assert.Single(placeholders);
-        Assert.All(placeholders, tab => Assert.Empty(tab.GraphSeries));
-        Assert.All(placeholders, tab => Assert.False(tab.UsesGraphSnapshots));
+        Assert.Equal(14, functional.Length);
+        Assert.Empty(placeholders);
     }
 }

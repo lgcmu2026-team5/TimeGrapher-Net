@@ -17,6 +17,7 @@ internal enum InfoTabKind
     BeatNoiseScope,
     EscapementAnalyzer,
     WaveformCompare,
+    Spectrogram,
     Placeholder,
 }
 
@@ -57,6 +58,7 @@ internal static class InfoTabCatalog
     public const string BeatNoiseScopeTabId = "beat-noise-scope";
     public const string EscapementAnalyzerTabId = "escapement-analyzer";
     public const string WaveformCompareTabId = "waveform-compare";
+    public const string SpectrogramTabId = "spectrogram";
 
     public const int DefaultUiRefreshIntervalMs = 33;
     public const int SoundPrintRefreshIntervalMs = 100;
@@ -130,14 +132,16 @@ internal static class InfoTabCatalog
             // A / mean-C timing guides; it declares no per-frame graph-series
             // contract.
             new(WaveformCompareTabId, "Waveform Compare", InfoTabKind.WaveformCompare, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
+            // Spectrogram renders the Core-built STFT image the frame carries
+            // (the Sound Print pattern); the image publishes on the sound-print
+            // 100 ms cadence, so the tab refreshes on the same interval and
+            // declares no per-frame graph-series contract.
+            new(SpectrogramTabId, "Spectrogram", InfoTabKind.Spectrogram, SoundPrintRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
         };
 
         // Reserved placeholder tabs for features not yet built.
         // Titles are shortened from the planned feature names to fit the tab width.
-        (string Id, string Title)[] placeholders =
-        {
-            ("spectrogram", "Spectrogram"),
-        };
+        (string Id, string Title)[] placeholders = Array.Empty<(string, string)>();
 
         foreach ((string id, string title) in placeholders)
         {

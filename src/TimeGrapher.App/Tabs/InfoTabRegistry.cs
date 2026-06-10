@@ -45,6 +45,7 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.BeatNoiseScope] = CreateBeatNoiseScopeRegistration,
             [InfoTabKind.EscapementAnalyzer] = CreateEscapementAnalyzerRegistration,
             [InfoTabKind.WaveformCompare] = CreateWaveformCompareRegistration,
+            [InfoTabKind.Spectrogram] = CreateSpectrogramRegistration,
             [InfoTabKind.Placeholder] = CreatePlaceholderRegistration,
         };
 
@@ -1046,6 +1047,81 @@ internal sealed class InfoTabRegistry
 
         var renderer = new WaveformCompareRenderer(lanePlot, headerText, context.TextFontFamily);
         var consumer = new WaveformCompareFrameConsumer(renderer);
+        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
+    }
+
+    private static InfoTabRegistration CreateSpectrogramRegistration(
+        InfoTabDefinition definition,
+        InfoTabFactoryContext context)
+    {
+        // Core-built STFT image (x = time, y = frequency, color = dB intensity)
+        // with the frequency-axis labels on the left and the dB color legend
+        // below. The spectrogram shows raw signal energy before beat sync, so no
+        // waiting overlay is added (the Multi-Filter Scope reasoning).
+        _ = context;
+        var image = new Image
+        {
+            Stretch = Stretch.Fill,
+        };
+
+        TextBlock Label(string text) => new()
+        {
+            Text = text,
+            FontSize = 11,
+            Opacity = 0.65,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Display band markers for the projector's 0..12 kHz rows, low at the bottom.
+        var axisGrid = new Grid
+        {
+            Margin = new Thickness(8, 2, 4, 2),
+        };
+        TextBlock AxisLabel(string text, VerticalAlignment alignment)
+        {
+            TextBlock label = Label(text);
+            label.HorizontalAlignment = HorizontalAlignment.Right;
+            label.VerticalAlignment = alignment;
+            return label;
+        }
+        axisGrid.Children.Add(AxisLabel("12 kHz", VerticalAlignment.Top));
+        axisGrid.Children.Add(AxisLabel("6 kHz", VerticalAlignment.Center));
+        axisGrid.Children.Add(AxisLabel("0 Hz", VerticalAlignment.Bottom));
+
+        var legendImage = new Image
+        {
+            Stretch = Stretch.Fill,
+            Width = 160,
+            Height = 10,
+        };
+        var legendRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(8, 4),
+        };
+        legendRow.Children.Add(Label("-80 dB"));
+        legendRow.Children.Add(legendImage);
+        legendRow.Children.Add(Label("0 dB"));
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            RowDefinitions = new RowDefinitions("*,Auto"),
+        };
+        Grid.SetRow(axisGrid, 0);
+        Grid.SetColumn(axisGrid, 0);
+        Grid.SetRow(image, 0);
+        Grid.SetColumn(image, 1);
+        Grid.SetRow(legendRow, 1);
+        Grid.SetColumn(legendRow, 1);
+        grid.Children.Add(axisGrid);
+        grid.Children.Add(image);
+        grid.Children.Add(legendRow);
+
+        var renderer = new SpectrogramRenderer(image, legendImage);
+        var consumer = new SpectrogramFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 
