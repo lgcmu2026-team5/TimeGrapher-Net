@@ -41,6 +41,7 @@ public sealed class AnalysisWorker : IDisposable
     private readonly ScopeRateFrameProjector _scopeRateProjector;
     private readonly SoundPrintFrameProjector _soundPrintProjector;
     private readonly BeatMetricsFrameProjector _beatMetricsProjector = new();
+    private readonly SweepFrameProjector _sweepProjector;
     private readonly AnalysisDeadlineMonitor _deadlineMonitor = new();
     private readonly float[] _inputBlock;
 
@@ -92,6 +93,7 @@ public sealed class AnalysisWorker : IDisposable
             config.SoundImageWidth,
             config.SoundImageHeight,
             config.SoundImageBackgroundColor);
+        _sweepProjector = new SweepFrameProjector(config.SampleRate);
     }
 
     /// <summary>Starts the analysis thread (AutoResetEvent wait loop).</summary>
@@ -116,6 +118,16 @@ public sealed class AnalysisWorker : IDisposable
     public void NotifyDataReady()
     {
         _wakeup.Set();
+    }
+
+    /// <summary>
+    /// Request a new Scope Mode sweep window length (multiple of the beat
+    /// period). Stored in a volatile knob and applied on the analysis thread at
+    /// the start of the next pass. Callable from any thread.
+    /// </summary>
+    public void SetSweepMultiple(int sweepMultiple)
+    {
+        _sweepProjector.SetSweepMultiple(sweepMultiple);
     }
 
     /// <summary>
@@ -281,6 +293,7 @@ public sealed class AnalysisWorker : IDisposable
             _scopeRateProjector.Project(pipelineUpdate, frame);
             _soundPrintProjector.Project(pipelineUpdate);
             _beatMetricsProjector.Project(pipelineUpdate);
+            _sweepProjector.Project(pipelineUpdate);
             UpdateForegroundStats(read.SamplesCopied, frame);
         }
 
@@ -292,6 +305,7 @@ public sealed class AnalysisWorker : IDisposable
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame);
         _beatMetricsProjector.AppendSnapshot(frame);
+        _sweepProjector.AppendSnapshot(frame);
 
         MasterAudioBufferSnapshot endSnapshot = _rawAudio.GetSnapshot();
         frame.AnalysisLagSamples = endSnapshot.TotalSamplesWritten > sourceSampleEnd
@@ -371,9 +385,11 @@ public sealed class AnalysisWorker : IDisposable
         _scopeRateProjector.Project(flushUpdate, frame);
         _soundPrintProjector.Project(flushUpdate);
         _beatMetricsProjector.Project(flushUpdate);
+        _sweepProjector.Project(flushUpdate);
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame, force: true);
         _beatMetricsProjector.AppendSnapshot(frame);
+        _sweepProjector.AppendSnapshot(frame);
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
         frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
 

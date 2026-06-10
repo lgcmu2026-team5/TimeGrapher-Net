@@ -52,6 +52,8 @@ public static class AnalysisGraphSeries
     public const string ScopeThreshold = "scope.threshold";
     public const string RateTic = "rate.tic";
     public const string RateToc = "rate.toc";
+    /// <summary>Scope Mode sweep window envelope (x = ms within the sweep window).</summary>
+    public const string SweepTrace = "sweep.trace";
 }
 
 public sealed class GraphSeriesFrame
