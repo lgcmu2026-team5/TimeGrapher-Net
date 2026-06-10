@@ -17,4 +17,11 @@
     <ProjectReference Include="..\..\src\TimeGrapher.App\TimeGrapher.App.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Avalonia's property-metadata cache is not thread-safe; test classes
+         constructing controls (AvaPlot, SplashWindow) must not run on two
+         xUnit collection threads at once. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
