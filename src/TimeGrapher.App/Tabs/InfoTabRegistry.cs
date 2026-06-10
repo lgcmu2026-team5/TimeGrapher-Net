@@ -651,10 +651,11 @@ internal sealed class InfoTabRegistry
         // position Core stamps into the metrics-history snapshot.
         IReadOnlyList<WatchPosition> positions = WatchPositions.All;
         var buttons = new Button[positions.Count];
+        int rows = (positions.Count + 1) / 2;
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions("*,*,*"),
+            RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("*", rows))),
             Margin = new Thickness(8),
         };
 

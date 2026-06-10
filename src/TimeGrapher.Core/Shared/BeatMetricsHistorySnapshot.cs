@@ -91,7 +91,7 @@ public sealed class BeatMetricsHistorySnapshot
 
     /// <summary>
     /// Per-position aggregates of every position measured so far, in
-    /// <see cref="WatchPositions.All"/> order (bounded: at most 6 entries).
+    /// <see cref="WatchPositions.All"/> order (bounded by <see cref="WatchPositions.Count"/> entries).
     /// Rebuilt together with the snapshot.
     /// </summary>
     public IReadOnlyList<PositionSummary> Positions { get; init; } = Array.Empty<PositionSummary>();

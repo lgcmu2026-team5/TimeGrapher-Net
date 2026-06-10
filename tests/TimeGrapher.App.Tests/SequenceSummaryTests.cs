@@ -46,6 +46,29 @@ public sealed class SequenceSummaryTests
     }
 
     [Fact]
+    public void Compute_IntermediatePositionsCountTowardMeansButNotVHComparison()
+    {
+        // A 45° intermediate position joins X̄ and D but stays out of the
+        // vertical/horizontal groups and the unbalance heuristic.
+        SequenceSummary summary = SequenceSummary.Compute(new[]
+        {
+            Position(WatchPosition.CH, rate: 0.0),
+            Position(WatchPosition.P6H, rate: 10.0),
+            Position(WatchPosition.P6H45, rate: 100.0),
+        });
+
+        Assert.Equal(3, summary.Rows.Count);
+        Assert.Equal((0.0 + 10.0 + 100.0) / 3.0, summary.RateMeanSPerDay!.Value, 9);
+        Assert.Equal(100.0, summary.RateSpreadSPerDay!.Value, 9);
+
+        // V/H comparison sees only CH (horizontal) and 6H (vertical).
+        Assert.Equal(10.0, summary.VerticalRateMeanSPerDay!.Value, 9);
+        Assert.Equal(0.0, summary.HorizontalRateMeanSPerDay!.Value, 9);
+        Assert.Null(summary.VerticalRateSpreadSPerDay); // one vertical position only
+        Assert.False(summary.UnbalanceSuspected);
+    }
+
+    [Fact]
     public void Compute_RowsCarryPerPositionMeansAndBeatCount()
     {
         SequenceSummary summary = SequenceSummary.Compute(new[]

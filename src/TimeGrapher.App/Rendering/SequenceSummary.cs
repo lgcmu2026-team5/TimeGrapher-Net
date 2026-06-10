@@ -70,8 +70,14 @@ internal sealed record SequenceSummary(
             if (position.Rate.Valid)
             {
                 rateMeans.Add(position.Rate.Mean);
-                (position.Position.IsHorizontal() ? horizontalRateMeans : verticalRateMeans)
-                    .Add(position.Rate.Mean);
+                // 45° intermediate positions count toward the sequence means and
+                // spreads but not toward the V/H comparison or the unbalance
+                // heuristic, which the manual defines over full positions only.
+                if (!position.Position.IsIntermediate())
+                {
+                    (position.Position.IsHorizontal() ? horizontalRateMeans : verticalRateMeans)
+                        .Add(position.Rate.Mean);
+                }
             }
 
             if (position.Amplitude.Valid)
