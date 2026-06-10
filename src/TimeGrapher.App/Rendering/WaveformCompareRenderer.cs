@@ -126,6 +126,10 @@ internal sealed class WaveformCompareRenderer
 
         plot.Axes.SetLimitsX(XMinMs, XMaxMs);
         plot.Axes.SetLimitsY(-0.1, YTop(0));
+        // Floor the left edge at the configured pre-A strip (XMinMs), not 0:
+        // this axis is "ms from A", so the negative pre-roll region carries the
+        // lane labels and pre-event envelope and must stay reachable.
+        PlotAxisRules.ClampLeftEdge(plot, XMinMs);
 
         ApplySeriesTheme();
         _plot.Refresh();
