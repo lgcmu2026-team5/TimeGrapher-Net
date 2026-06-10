@@ -42,6 +42,7 @@ public sealed class AnalysisWorker : IDisposable
     private readonly SoundPrintFrameProjector _soundPrintProjector;
     private readonly BeatMetricsFrameProjector _beatMetricsProjector = new();
     private readonly SweepFrameProjector _sweepProjector;
+    private readonly MultiFilterFrameProjector _multiFilterProjector;
     private readonly AnalysisDeadlineMonitor _deadlineMonitor = new();
     private readonly float[] _inputBlock;
 
@@ -94,6 +95,7 @@ public sealed class AnalysisWorker : IDisposable
             config.SoundImageHeight,
             config.SoundImageBackgroundColor);
         _sweepProjector = new SweepFrameProjector(config.SampleRate);
+        _multiFilterProjector = new MultiFilterFrameProjector(config.SampleRate);
     }
 
     /// <summary>Starts the analysis thread (AutoResetEvent wait loop).</summary>
@@ -282,6 +284,7 @@ public sealed class AnalysisWorker : IDisposable
             _config.SampleWriter?.Write(block);
 
             _soundPrintProjector.ProcessSamples(block);
+            _multiFilterProjector.ProcessSamples(block);
 
             DetectorMetricsBlockUpdate pipelineUpdate = _pipeline.Process(block);
             lastPipelineUpdate = pipelineUpdate;
@@ -306,6 +309,7 @@ public sealed class AnalysisWorker : IDisposable
         _soundPrintProjector.AppendSnapshot(frame);
         _beatMetricsProjector.AppendSnapshot(frame);
         _sweepProjector.AppendSnapshot(frame);
+        _multiFilterProjector.AppendSnapshot(frame);
 
         MasterAudioBufferSnapshot endSnapshot = _rawAudio.GetSnapshot();
         frame.AnalysisLagSamples = endSnapshot.TotalSamplesWritten > sourceSampleEnd
@@ -390,6 +394,9 @@ public sealed class AnalysisWorker : IDisposable
         _soundPrintProjector.AppendSnapshot(frame, force: true);
         _beatMetricsProjector.AppendSnapshot(frame);
         _sweepProjector.AppendSnapshot(frame);
+        // The flush pass has no new raw block to filter (the drain above already
+        // consumed it); republish the latest filter window on the final frame.
+        _multiFilterProjector.AppendSnapshot(frame);
         frame.ProcessingElapsedMs = processingTimer.Elapsed.TotalMilliseconds;
         frame.DeadlineDegradationLevel = _deadlineMonitor.Level;
 
