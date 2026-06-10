@@ -41,6 +41,7 @@ public sealed class AnalysisWorker : IDisposable
     private readonly ScopeRateFrameProjector _scopeRateProjector;
     private readonly SoundPrintFrameProjector _soundPrintProjector;
     private readonly BeatMetricsFrameProjector _beatMetricsProjector = new();
+    private readonly BeatSegmentCapture _beatSegmentCapture;
     private readonly SweepFrameProjector _sweepProjector;
     private readonly MultiFilterFrameProjector _multiFilterProjector;
     private readonly AnalysisDeadlineMonitor _deadlineMonitor = new();
@@ -94,6 +95,7 @@ public sealed class AnalysisWorker : IDisposable
             config.SoundImageWidth,
             config.SoundImageHeight,
             config.SoundImageBackgroundColor);
+        _beatSegmentCapture = new BeatSegmentCapture(config.SampleRate, config.LiftAngle);
         _sweepProjector = new SweepFrameProjector(config.SampleRate);
         _multiFilterProjector = new MultiFilterFrameProjector(config.SampleRate);
     }
@@ -318,6 +320,7 @@ public sealed class AnalysisWorker : IDisposable
             _scopeRateProjector.Project(pipelineUpdate, frame);
             _soundPrintProjector.Project(pipelineUpdate);
             _beatMetricsProjector.Project(pipelineUpdate);
+            _beatSegmentCapture.Project(pipelineUpdate);
             _sweepProjector.Project(pipelineUpdate);
             UpdateForegroundStats(read.SamplesCopied, frame);
         }
@@ -330,6 +333,7 @@ public sealed class AnalysisWorker : IDisposable
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame);
         _beatMetricsProjector.AppendSnapshot(frame);
+        _beatSegmentCapture.AppendSnapshot(frame);
         _sweepProjector.AppendSnapshot(frame);
         _multiFilterProjector.AppendSnapshot(frame);
 
@@ -411,10 +415,12 @@ public sealed class AnalysisWorker : IDisposable
         _scopeRateProjector.Project(flushUpdate, frame);
         _soundPrintProjector.Project(flushUpdate);
         _beatMetricsProjector.Project(flushUpdate);
+        _beatSegmentCapture.Project(flushUpdate);
         _sweepProjector.Project(flushUpdate);
         _scopeRateProjector.AppendSnapshot(frame);
         _soundPrintProjector.AppendSnapshot(frame, force: true);
         _beatMetricsProjector.AppendSnapshot(frame);
+        _beatSegmentCapture.AppendSnapshot(frame);
         _sweepProjector.AppendSnapshot(frame);
         // The flush pass has no new raw block to filter (the drain above already
         // consumed it); republish the latest filter window on the final frame.

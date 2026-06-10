@@ -198,6 +198,14 @@ public sealed class AnalysisFrame
     /// </summary>
     public BeatMetricsHistorySnapshot? MetricsHistory;
 
+    /// <summary>
+    /// Recent per-beat envelope segments (Beat-Noise Scope; shared infrastructure
+    /// for beat-aligned waveform views). Cumulative ring snapshot for the same
+    /// reason as <see cref="MetricsHistory"/>: latest-wins frame coalescing must
+    /// lose nothing.
+    /// </summary>
+    public BeatSegmentsSnapshot? BeatSegments;
+
     public PixelBuffer? SoundImage;
     public bool SoundImageUpdated;
 
