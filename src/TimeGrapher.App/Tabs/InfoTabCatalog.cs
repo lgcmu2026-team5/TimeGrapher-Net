@@ -13,7 +13,6 @@ internal enum InfoTabKind
     MultiFilterScope,
     LongTermPerformance,
     TestPositions,
-    MultiPositionSequence,
     BeatNoiseScope,
     EscapementAnalyzer,
     WaveformCompare,
@@ -54,7 +53,6 @@ internal static class InfoTabCatalog
     public const string MultiFilterScopeTabId = "multi-filter-scope";
     public const string LongTermPerfTabId = "long-term-perf";
     public const string TestPositionsTabId = "test-positions";
-    public const string MultiPositionSeqTabId = "multi-position-seq";
     public const string BeatNoiseScopeTabId = "beat-noise-scope";
     public const string EscapementAnalyzerTabId = "escapement-analyzer";
     public const string WaveformCompareTabId = "waveform-compare";
@@ -110,14 +108,10 @@ internal static class InfoTabCatalog
             // (bucket averages plus YMin/YMax variation bands); it declares no
             // per-frame graph-series contract.
             new(LongTermPerfTabId, "Long-Term", InfoTabKind.LongTermPerformance, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
-            // Test Positions reads only the cumulative snapshot's ActivePosition
-            // stamp (the highlight follows what Core actually tags); it declares
-            // no per-frame graph-series contract.
+            // Positions reads the cumulative snapshot's ActivePosition stamp
+            // and per-position aggregates; it declares no per-frame graph-series
+            // contract.
             new(TestPositionsTabId, "Positions", InfoTabKind.TestPositions, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
-            // Multi-Position Sequence reads only the cumulative snapshot's
-            // per-position aggregates (PositionSummary list) and active-position
-            // stamp; it declares no per-frame graph-series contract.
-            new(MultiPositionSeqTabId, "Position Seq", InfoTabKind.MultiPositionSequence, DefaultUiRefreshIntervalMs, UsesGraphSnapshots: false, Array.Empty<GraphSeriesDefinition>()),
             // Beat-Noise Scope renders the cumulative BeatSegmentsSnapshot the
             // frame carries (Scope 1 segments + Scope 2 lane averages); it
             // declares no per-frame graph-series contract.

@@ -8,7 +8,7 @@ using Xunit;
 namespace TimeGrapher.App.Tests;
 
 /// <summary>
-/// The Test Positions click-latch contract: a click highlights immediately and
+/// The Positions click-latch contract: a click highlights immediately and
 /// holds against stale in-flight snapshots until Core echoes the requested
 /// position back, after which the snapshot regains authority. Buttons are
 /// constructed headless (the InfoTabRegistryTests pattern).

@@ -106,21 +106,12 @@ public sealed class InfoTabCatalogTests
     }
 
     [Fact]
-    public void TestPositionsTabRendersFromCumulativeHistoryNotGraphSeries()
+    public void PositionsTabCombinesSelectionAndSequenceHistoryWithoutGraphSeries()
     {
         InfoTabDefinition tab = InfoTabCatalog.Get(InfoTabCatalog.TestPositionsTabId);
 
         Assert.Equal(InfoTabKind.TestPositions, tab.Kind);
-        Assert.False(tab.UsesGraphSnapshots);
-        Assert.Empty(tab.GraphSeries);
-    }
-
-    [Fact]
-    public void MultiPositionSeqTabRendersFromCumulativeHistoryNotGraphSeries()
-    {
-        InfoTabDefinition tab = InfoTabCatalog.Get(InfoTabCatalog.MultiPositionSeqTabId);
-
-        Assert.Equal(InfoTabKind.MultiPositionSequence, tab.Kind);
+        Assert.Equal("Positions", tab.Title);
         Assert.False(tab.UsesGraphSnapshots);
         Assert.Empty(tab.GraphSeries);
     }

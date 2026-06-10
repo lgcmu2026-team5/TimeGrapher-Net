@@ -5,23 +5,29 @@ namespace TimeGrapher.App.Rendering;
 
 internal sealed class TestPositionsFrameConsumer : IAnalysisFrameConsumer
 {
-    private readonly TestPositionsRenderer _renderer;
+    private readonly TestPositionsRenderer _positionRenderer;
+    private readonly MultiPositionSeqRenderer _sequenceRenderer;
 
-    public TestPositionsFrameConsumer(TestPositionsRenderer renderer)
+    public TestPositionsFrameConsumer(
+        TestPositionsRenderer positionRenderer,
+        MultiPositionSeqRenderer sequenceRenderer)
     {
-        _renderer = renderer;
+        _positionRenderer = positionRenderer;
+        _sequenceRenderer = sequenceRenderer;
     }
 
     public string TabId => InfoTabCatalog.TestPositionsTabId;
 
     public void Initialize(AnalysisTabResetContext context)
     {
-        _renderer.Reset();
+        _positionRenderer.Reset();
+        _sequenceRenderer.Reset();
     }
 
     public void Reset(AnalysisTabResetContext context)
     {
-        _renderer.Reset();
+        _positionRenderer.Reset();
+        _sequenceRenderer.Reset();
     }
 
     public void ObserveFrame(AnalysisFrame frame)
@@ -34,6 +40,7 @@ internal sealed class TestPositionsFrameConsumer : IAnalysisFrameConsumer
     {
         // No time axis on this tab, so the review-cursor contract does not apply.
         _ = context;
-        _renderer.RenderFrame(frame);
+        _positionRenderer.RenderFrame(frame);
+        _sequenceRenderer.RenderFrame(frame);
     }
 }

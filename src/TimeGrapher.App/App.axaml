@@ -206,7 +206,7 @@
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
-    <!-- Test Positions tab: the active position button (declared after the
+    <!-- Positions tab: the active position button (declared after the
          global TextBlock style so the white-on-accent text wins). -->
     <Style Selector="Button.PositionButton">
       <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -218,7 +218,7 @@
     <Style Selector="Button.PositionButton.active TextBlock">
       <Setter Property="Foreground" Value="White" />
     </Style>
-    <!-- Multi-Position Sequence tab: accent highlight behind the table row of
+    <!-- Positions tab: accent highlight behind the table row of
          the position currently being measured, with white-on-accent cell text
          (declared after the global TextBlock style so the override wins). -->
     <Style Selector="Border.SeqActiveRow">

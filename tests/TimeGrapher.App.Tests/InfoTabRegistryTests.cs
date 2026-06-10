@@ -30,6 +30,23 @@ public sealed class InfoTabRegistryTests
     }
 
     [Fact]
+    public void RegistryCreatesOneSideBySidePositionsTab()
+    {
+        var tabControl = new TabControl();
+
+        InfoTabRegistry registry = InfoTabRegistry.FromCatalog(tabControl, "Arial");
+
+        InfoTabRegistration registration = Assert.Single(
+            registry.Registrations,
+            registration => registration.Definition.Id == InfoTabCatalog.TestPositionsTabId);
+        var content = Assert.IsType<Grid>(registration.TabItem.Content);
+
+        Assert.Equal(2, content.ColumnDefinitions.Count);
+        Assert.Single(registry.Consumers, consumer => consumer.TabId == InfoTabCatalog.TestPositionsTabId);
+        Assert.DoesNotContain(registry.Registrations, registration => registration.Definition.Title == "Position Seq");
+    }
+
+    [Fact]
     public void RegistryRejectsMissingConsumer()
     {
         var tabControl = new TabControl();

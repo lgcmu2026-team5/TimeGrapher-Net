@@ -41,7 +41,6 @@ internal sealed class InfoTabRegistry
             [InfoTabKind.MultiFilterScope] = CreateMultiFilterScopeRegistration,
             [InfoTabKind.LongTermPerformance] = CreateLongTermPerfRegistration,
             [InfoTabKind.TestPositions] = CreateTestPositionsRegistration,
-            [InfoTabKind.MultiPositionSequence] = CreateMultiPositionSeqRegistration,
             [InfoTabKind.BeatNoiseScope] = CreateBeatNoiseScopeRegistration,
             [InfoTabKind.EscapementAnalyzer] = CreateEscapementAnalyzerRegistration,
             [InfoTabKind.WaveformCompare] = CreateWaveformCompareRegistration,
@@ -627,22 +626,24 @@ internal sealed class InfoTabRegistry
         InfoTabDefinition definition,
         InfoTabFactoryContext context)
     {
-        // One large button per NIHS 95-10 / ISO 3158 test position in a
-        // 2-column grid (the manual's horizontal pair CH/CB on the first row).
-        // Clicking writes the shared SelectedPositionIndex view-model property;
-        // MainWindow forwards the change to the running analysis worker (the
-        // SetSoundBackgroundColor flow) and the status-bar "POS …" indicator
-        // updates from the same property, so the active position stays visible
-        // at all times while measuring. The consumer re-highlights from the
-        // position Core stamps into the metrics-history snapshot.
+        // Positions combines the NIHS 95-10 / ISO 3158 selection buttons with
+        // the per-position measurement table. The left button strip writes the
+        // shared SelectedPositionIndex view-model property; MainWindow forwards
+        // the change to the running analysis worker and the status-bar "POS …"
+        // indicator updates from the same property. Both renderers read the
+        // cumulative metrics-history snapshot, so one tab shows what Core is
+        // tagging and the measured values for those positions together.
         IReadOnlyList<WatchPosition> positions = WatchPositions.All;
         var buttons = new Button[positions.Count];
         int rows = (positions.Count + 1) / 2;
-        var grid = new Grid
+        var buttonGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("*", rows))),
-            Margin = new Thickness(8),
+            RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("Auto", rows))),
+            Margin = new Thickness(8, 8, 4, 8),
+            MinWidth = 150,
+            MaxWidth = 180,
+            VerticalAlignment = VerticalAlignment.Top,
         };
 
         for (int i = 0; i < positions.Count; i++)
@@ -651,42 +652,30 @@ internal sealed class InfoTabRegistry
             var shortText = new TextBlock
             {
                 Text = position.ShortName(),
-                FontSize = 34,
+                FontSize = 16,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
             };
-            var longText = new TextBlock
-            {
-                Text = position.LongName(),
-                FontSize = 13,
-                Opacity = 0.75,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
-            var content = new StackPanel
-            {
-                Spacing = 2,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            content.Children.Add(shortText);
-            content.Children.Add(longText);
 
             var button = new Button
             {
-                Content = content,
+                Content = shortText,
                 Classes = { "PositionButton" },
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Margin = new Thickness(4),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(2),
+                Padding = new Thickness(4, 3),
+                MinHeight = 32,
             };
-            ToolTip.SetTip(button, $"Tag new measurements as {position.ShortName()} — {position.LongName()}");
+            ToolTip.SetTip(button, $"Tag new measurements as {position.ShortName()} - {position.LongName()}");
             Grid.SetRow(button, i / 2);
             Grid.SetColumn(button, i % 2);
             buttons[i] = button;
-            grid.Children.Add(button);
+            buttonGrid.Children.Add(button);
         }
 
         var initialPosition = (WatchPosition)(context.ViewModel?.SelectedPositionIndex ?? 0);
-        var renderer = new TestPositionsRenderer(buttons, initialPosition);
+        var positionRenderer = new TestPositionsRenderer(buttons, initialPosition);
 
         for (int i = 0; i < buttons.Length; i++)
         {
@@ -698,25 +687,16 @@ internal sealed class InfoTabRegistry
                     viewModel.SelectedPositionIndex = (int)position;
                 }
 
-                renderer.RequestPosition(position);
+                positionRenderer.RequestPosition(position);
             };
         }
 
-        var consumer = new TestPositionsFrameConsumer(renderer);
-        return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
-    }
-
-    private static InfoTabRegistration CreateMultiPositionSeqRegistration(
-        InfoTabDefinition definition,
-        InfoTabFactoryContext context)
-    {
         // Sequence results table (POS | RATE | AMP | BEAT ERR | BEATS, one row
         // per measured position, the active position's row highlighted) above
         // the X / D / vertical-vs-horizontal summary block; the accent banner
         // reports the balance-wheel unbalance hint. The renderer fills the
         // table from the cumulative snapshot's PositionSummary list.
         Border alertBanner = CreateAlertBanner(out TextBlock alertText);
-
 
         var tableGrid = new Grid
         {
@@ -743,21 +723,28 @@ internal sealed class InfoTabRegistry
 
         var grid = new Grid
         {
+            ColumnDefinitions = new ColumnDefinitions("172,*"),
+            RowDefinitions = new RowDefinitions("*"),
+        };
+
+        var sequenceGrid = new Grid
+        {
             RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto"),
+            Margin = new Thickness(4, 4, 8, 4),
         };
         Grid.SetRow(alertBanner, 0);
         Grid.SetRow(tableGrid, 1);
         Grid.SetRow(summaryText, 2);
         Grid.SetRow(explanationText, 3);
-        grid.Children.Add(alertBanner);
-        grid.Children.Add(tableGrid);
-        grid.Children.Add(summaryText);
-        grid.Children.Add(explanationText);
+        sequenceGrid.Children.Add(alertBanner);
+        sequenceGrid.Children.Add(tableGrid);
+        sequenceGrid.Children.Add(summaryText);
+        sequenceGrid.Children.Add(explanationText);
 
         if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
         {
             Grid.SetRow(overlay, 1);
-            grid.Children.Add(overlay);
+            sequenceGrid.Children.Add(overlay);
         }
 
         // "Reset Sequence" raises the shared view-model command; MainWindow
@@ -775,10 +762,15 @@ internal sealed class InfoTabRegistry
         };
         ToolTip.SetTip(resetButton, "Clear every position's results and start a new measurement cycle");
         Grid.SetRow(resetButton, 1);
-        grid.Children.Add(resetButton);
+        sequenceGrid.Children.Add(resetButton);
 
-        var renderer = new MultiPositionSeqRenderer(tableGrid, alertBanner, alertText, summaryText);
-        var consumer = new MultiPositionSeqFrameConsumer(renderer);
+        Grid.SetColumn(buttonGrid, 0);
+        Grid.SetColumn(sequenceGrid, 1);
+        grid.Children.Add(buttonGrid);
+        grid.Children.Add(sequenceGrid);
+
+        var sequenceRenderer = new MultiPositionSeqRenderer(tableGrid, alertBanner, alertText, summaryText);
+        var consumer = new TestPositionsFrameConsumer(positionRenderer, sequenceRenderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
 

@@ -333,7 +333,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // Multi-Position Sequence "Reset Sequence": clear the running worker's
+    // Positions "Reset Sequence": clear the running worker's
     // per-position aggregates so a new measurement cycle starts.
     private void OnResetSequenceRequested()
     {

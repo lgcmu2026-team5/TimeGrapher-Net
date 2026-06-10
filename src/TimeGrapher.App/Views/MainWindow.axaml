@@ -95,7 +95,7 @@
         <TextBlock Name="PositionBarText" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
                    Text="{Binding PositionLabel}"
                    Foreground="{DynamicResource ChromeAccentBrush}"
-                   ToolTip.Tip="Active watch test position (NIHS 95-10 / ISO 3158) — pick it on the Test Positions tab" />
+                   ToolTip.Tip="Active watch test position (NIHS 95-10 / ISO 3158) - pick it on the Positions tab" />
         <TextBlock Name="LatencyBarText" Grid.Column="2" VerticalAlignment="Center" Margin="12,0,6,0"
                    Text="{Binding LatencyText}"
                    ToolTip.Tip="End-to-end latency avg/worst (capture→processing + processing→display), dropped input samples / coalesced UI frames, missed beats, sync losses" />
