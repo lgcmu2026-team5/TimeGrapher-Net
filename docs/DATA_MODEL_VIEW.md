@@ -193,6 +193,35 @@ class MetricsHistorySeries {
     +double YMax
 }
 
+class BeatSegmentsSnapshot {
+    +ulong Version
+    +BeatSegment Segments
+    +double LiftAngleDeg
+    +BeatNoiseAverageSnapshot Average
+}
+
+class BeatSegment {
+    +float Samples
+    +double MsPerPoint
+    +double StartTimeS
+    +bool IsTic
+    +double AOffsetMs
+    +float PeakValue
+    +double CPeakOffsetMs
+    +double COnsetOffsetMs
+}
+
+class BeatNoiseAverageSnapshot {
+    +bool SigmaEnabled
+    +bool Frozen
+    +int Lane1Count
+    +int Lane2Count
+    +float Lane1
+    +float Lane2
+    +double Lane1MeanPeak
+    +double Lane2MeanPeak
+}
+
 class PixelBuffer {
     +int Width
     +int Height
@@ -262,6 +291,7 @@ AnalysisFrame "1" *-- "0..*" ScopeMarker : contains markers
 AnalysisFrame "1" *-- "1" WatchMetricsUpdate : contains metrics
 AnalysisFrame "1" o-- "0..1" PixelBuffer : contains sound image
 AnalysisFrame "1" o-- "0..1" BeatMetricsHistorySnapshot : shares cumulative history
+AnalysisFrame "1" o-- "0..1" BeatSegmentsSnapshot : shares recent beat windows
 
 WatchMetricsUpdate "1" o-- "0..1" BeatTimingSample : per A event
 WatchMetricsUpdate "1" o-- "0..1" AmplitudeSample : per C event
@@ -272,6 +302,8 @@ BeatMetricsHistorySnapshot "1" --> "1" WatchPosition : tags new beats as
 BeatMetricsHistorySnapshot "1" *-- "0..6" PositionSummary : measured positions only
 PositionSummary "1" --> "1" WatchPosition : aggregates
 PositionSummary "1" *-- "3" StatsSummary : rate/amplitude/beat error
+BeatSegmentsSnapshot "1" o-- "0..8" BeatSegment : recent beats, oldest first
+BeatSegmentsSnapshot "1" *-- "1" BeatNoiseAverageSnapshot : scope 2 lane state
 ```
 
 ## Entity summary
@@ -290,6 +322,8 @@ PositionSummary "1" *-- "3" StatsSummary : rate/amplitude/beat error
 | `StatsSummary` | `Core.Shared` (fed by `Core.Metrics.RunningStats`) | Running min/max/mean/population-σ since start for rate and amplitude — exact per-beat statistics independent of series decimation (Vario display) |
 | `WatchPosition` | `Core.Shared` | Standard watch test positions per NIHS 95-10 / ISO 3158 (CH dial up, CB dial down, 6H crown left, 9H crown down, 3H crown up, 12H crown right); stamped on every snapshot as the position new beats are tagged with |
 | `PositionSummary` | `Core.Shared` (aggregated by `Core.Metrics.BeatMetricsHistory`) | Per-position rate/amplitude/signed-beat-error running aggregates; only measured positions appear, bounded at the six standard slots (Test Positions display, future multi-position sequence) |
+| `BeatSegmentsSnapshot`, `BeatSegment` | `Core.Shared` (built by `Core.Analysis.BeatSegmentCapture`) | Ring of the last 8 per-beat envelope windows (5 ms pre-roll, 400 ms, 1600 points) with A / C-peak / C-onset offsets, phase and lift angle; segment samples reference the capture's fixed 16-buffer pool and stay immutable until rotated out (Beat-Noise Scope; reused by beat-aligned waveform views) |
+| `BeatNoiseAverageSnapshot` | `Core.Shared` (built by `Core.Analysis.BeatNoiseAverager`) | Scope 2 state: two phase-alternating 20 ms averaged lanes (800 points each) deliberately labeled trace 1/2 — never tic/toc — with per-lane interval counts, mean peak amplitude and the 50+50 cycle freeze flag |
 
 ## Relationship notes
 
@@ -299,4 +333,4 @@ PositionSummary "1" *-- "3" StatsSummary : rate/amplitude/beat error
 | 1:n | One `AnalysisRun` produces many `AnalysisFrame` objects; one `TgResult` contains many `TgEvent` objects; one `AnalysisFrame` contains many graph series and markers |
 | n:n | No native persisted many-to-many relationship exists because the app has no database and most runtime data is owned by a single run/frame |
 | Generalization / specialization | `AudioSource` specializes into live/playback/sim sources; `TgEvent` specializes into A and C events; `ScopeMarker` specializes into vertical/horizontal/text markers |
-| Aggregation / composition | `AnalysisFrame` is composed from graph series, markers, metrics, and optional sound image; `WavFile` contains format metadata and can be decoded into `WavData`; `BeatMetricsHistorySnapshot` aggregates three `MetricsHistorySeries` plus up to six `PositionSummary` rows and is shared (aggregation, not owned) by many frames |
+| Aggregation / composition | `AnalysisFrame` is composed from graph series, markers, metrics, and optional sound image; `WavFile` contains format metadata and can be decoded into `WavData`; `BeatMetricsHistorySnapshot` aggregates three `MetricsHistorySeries` plus up to six `PositionSummary` rows and is shared (aggregation, not owned) by many frames; `BeatSegmentsSnapshot` is shared the same way and aggregates (not owns) up to eight `BeatSegment` windows whose samples live in the capture's pooled buffers |
