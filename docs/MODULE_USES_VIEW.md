@@ -86,7 +86,11 @@ flowchart TB
         PlatformAudio["Platform audio backends"]
     end
 
+    Program --> Views
     Program --> Audio
+    Program --> Rendering
+    Program --> CoreAnalysis
+    Program --> CoreAudioIo
     Program --> CoreShared
     Views --> ViewModels
     Views --> Services
