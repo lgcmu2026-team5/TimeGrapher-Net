@@ -67,6 +67,12 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
 
         if (_audioInput != null)
         {
+            // Mirror TryStop's discipline: detach before disposing, because
+            // WaveInEvent raises RecordingStopped asynchronously and the flag
+            // above is re-armed to false below — possibly before the replaced
+            // device's callback runs, which would tear down the new run.
+            _audioInput.DataAvailable -= OnDataAvailable;
+            _audioInput.RecordingStopped -= OnRecordingStopped;
             _audioInput.Dispose();
             _audioInput = null;
         }
