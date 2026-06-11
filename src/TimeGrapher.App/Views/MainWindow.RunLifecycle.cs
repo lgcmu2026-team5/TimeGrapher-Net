@@ -244,11 +244,6 @@ public partial class MainWindow
         mViewModel.SetRunning();
     }
 
-    private void SetGuiStartingMode()
-    {
-        mViewModel.SetStarting();
-    }
-
     private void SetGuiStoppingMode()
     {
         mViewModel.SetStopping();
