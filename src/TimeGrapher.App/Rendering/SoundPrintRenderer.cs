@@ -28,14 +28,6 @@ internal sealed class SoundPrintRenderer
         }
     }
 
-    public void RenderFrame(AnalysisFrame frame)
-    {
-        if (frame.SoundImageUpdated && frame.SoundImage != null)
-        {
-            RenderImage(frame.SoundImage);
-        }
-    }
-
     public void RenderImage(PixelBuffer image)
     {
         PixelBufferBitmap.UpdateImage(_soundImage, image);

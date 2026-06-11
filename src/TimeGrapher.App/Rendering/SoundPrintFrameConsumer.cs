@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using TimeGrapher.App.Tabs;
 using TimeGrapher.Core.Shared;
 
@@ -6,6 +7,11 @@ namespace TimeGrapher.App.Rendering;
 internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer, IThemedFrameConsumer
 {
     private readonly SoundPrintRenderer _renderer;
+    // The worker buffer that produced the displayed image. A theme toggle
+    // replaces _latestSoundImage with a remapped copy while this keeps
+    // pointing at the original, so a re-routed kept frame (same pooled
+    // buffer) is recognized and cannot restore the old-background image.
+    private PixelBuffer? _latestSourceImage;
     private PixelBuffer? _latestSoundImage;
     private uint _displayedBackground = PlotThemePalette.Current.ScopeBg;
 
@@ -26,6 +32,7 @@ internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer, IThemedF
     public void Reset(AnalysisTabResetContext context)
     {
         _ = context;
+        _latestSourceImage = null;
         _latestSoundImage = null;
         _renderer.Reset();
     }
@@ -38,15 +45,27 @@ internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer, IThemedF
     // worker's publish pool.
     public void ApplyTheme(PlotThemePalette theme)
     {
-        uint oldBackground = _displayedBackground;
-        _displayedBackground = theme.ScopeBg;
-        if (_latestSoundImage == null || oldBackground == theme.ScopeBg)
+        if (TryRemapKeptImage(theme.ScopeBg, out PixelBuffer? remapped))
         {
-            return;
+            _renderer.RenderImage(remapped);
+        }
+    }
+
+    // Internal seam: the remap state machine is testable without the blit,
+    // which needs the Avalonia platform.
+    internal bool TryRemapKeptImage(uint newBackground, [NotNullWhen(true)] out PixelBuffer? remapped)
+    {
+        uint oldBackground = _displayedBackground;
+        _displayedBackground = newBackground;
+        if (_latestSoundImage == null || oldBackground == newBackground)
+        {
+            remapped = null;
+            return false;
         }
 
-        _latestSoundImage = RemapBackground(_latestSoundImage, oldBackground, theme.ScopeBg);
-        _renderer.RenderImage(_latestSoundImage);
+        remapped = RemapBackground(_latestSoundImage, oldBackground, newBackground);
+        _latestSoundImage = remapped;
+        return true;
     }
 
     internal static PixelBuffer RemapBackground(PixelBuffer source, uint oldBackground, uint newBackground)
@@ -65,8 +84,14 @@ internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer, IThemedF
 
     public void ObserveFrame(AnalysisFrame frame)
     {
-        if (frame.SoundImageUpdated && frame.SoundImage != null)
+        // A re-routed kept frame carries the same pooled buffer reference
+        // (the publish pool never repeats a reference on consecutive
+        // publishes), so re-observing it must not overwrite a theme-remapped
+        // copy with the old-background original.
+        if (frame.SoundImageUpdated && frame.SoundImage != null &&
+            !ReferenceEquals(frame.SoundImage, _latestSourceImage))
         {
+            _latestSourceImage = frame.SoundImage;
             _latestSoundImage = frame.SoundImage;
         }
     }
@@ -78,11 +103,7 @@ internal sealed class SoundPrintFrameConsumer : IAnalysisFrameConsumer, IThemedF
         // not apply; pause already freezes the image for inspection.
         _ = context;
         ObserveFrame(frame);
-        if (frame.SoundImageUpdated && frame.SoundImage != null)
-        {
-            _renderer.RenderFrame(frame);
-        }
-        else if (_latestSoundImage != null)
+        if (_latestSoundImage != null)
         {
             _renderer.RenderImage(_latestSoundImage);
         }

@@ -47,6 +47,37 @@ public sealed class SoundPrintFrameConsumerTests
     }
 
     [Fact]
+    public void ReRoutedKeptFrameDoesNotRestoreTheStaleBackground()
+    {
+        var renderer = new SoundPrintRenderer(new Image());
+        var consumer = new SoundPrintFrameConsumer(renderer);
+        consumer.TryRemapKeptImage(0xFFEEEEEE, out _); // displayed background = light
+
+        var soundImage = new PixelBuffer(2, 2);
+        soundImage.Fill(0xFFEEEEEE);
+        var keptFrame = new AnalysisFrame
+        {
+            SoundImageUpdated = true,
+            SoundImage = soundImage,
+        };
+        consumer.ObserveFrame(keptFrame);
+
+        // Theme toggle remaps the kept image into a copy.
+        Assert.True(consumer.TryRemapKeptImage(0xFF111111, out PixelBuffer? remapped));
+        Assert.Equal(0xFF111111u, remapped!.GetPixel(0, 0));
+
+        // The kept frame re-routes (tab switch / scrub while paused) with the
+        // SAME pooled buffer: it must not undo the remap.
+        consumer.ObserveFrame(keptFrame);
+        Assert.Same(remapped, consumer.LatestSoundImage);
+
+        // A genuinely new publish (different buffer reference) replaces it.
+        var next = new PixelBuffer(2, 2);
+        consumer.ObserveFrame(new AnalysisFrame { SoundImageUpdated = true, SoundImage = next });
+        Assert.Same(next, consumer.LatestSoundImage);
+    }
+
+    [Fact]
     public void ApplyThemeWithoutAKeptImageDoesNotBlit()
     {
         // Headless: any blit would throw (WriteableBitmap needs the Avalonia
