@@ -45,7 +45,7 @@ public sealed class MainWindowViewModelTests
         Assert.True(vm.IsStopEnabled);
         Assert.False(vm.AreRunParametersEnabled);
         Assert.False(vm.IsSampleRateEnabled);
-        Assert.False(vm.IsGainEnabled);
+        Assert.True(vm.IsGainEnabled); // live knob: stays adjustable mid-run
         Assert.Equal("Pause", vm.PlayPauseButtonText);
         Assert.False(vm.IsPlayPauseButtonShowingPlay);
         Assert.True(vm.IsPlayPauseButtonShowingPause);
@@ -117,7 +117,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void LiveOnlyControlsDependOnModeAndStoppedState()
+    public void SampleRateRequiresStoppedStateWhileGainIsModeGatedOnly()
     {
         var vm = CreateViewModel();
 
@@ -134,7 +134,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.False(vm.AreRunParametersEnabled);
         Assert.False(vm.IsSampleRateEnabled);
-        Assert.False(vm.IsGainEnabled);
+        Assert.True(vm.IsGainEnabled); // live knob: stays adjustable mid-run
 
         vm.SetStopped();
 

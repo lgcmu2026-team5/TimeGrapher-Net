@@ -121,7 +121,10 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsSampleRateEnabled => AreRunParametersEnabled && _modeAllowsSampleRate;
 
-    public bool IsGainEnabled => AreRunParametersEnabled && _modeAllowsGain;
+    // Gain is a live knob (both platform workers forward SetVolume mid-capture,
+    // matching the Qt original's slider), so it is gated by mode only, not by
+    // run state.
+    public bool IsGainEnabled => _modeAllowsGain;
 
     public string PauseButtonText => _runState == RunUiState.Paused ? "Resume" : "Pause";
 
@@ -444,7 +447,6 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsPlayPauseEnabled));
         OnPropertyChanged(nameof(IsStopEnabled));
         OnPropertyChanged(nameof(IsSampleRateEnabled));
-        OnPropertyChanged(nameof(IsGainEnabled));
         OnPropertyChanged(nameof(PauseButtonText));
         OnPropertyChanged(nameof(PlayPauseButtonText));
         OnPropertyChanged(nameof(IsPlayPauseButtonShowingPause));
