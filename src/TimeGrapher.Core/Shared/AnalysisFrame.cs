@@ -89,7 +89,6 @@ public sealed class WatchMetricsUpdate
     public IReadOnlyList<double> YToc => _yToc;
     public bool ResultsUpdated { get; private set; }
     public string ResultsText { get; private set; } = "";
-    public bool CMarkerTextUpdated { get; private set; }
     public string CMarkerText { get; private set; } = "";
     public bool BeatTimingSampleUpdated { get; private set; }
     public BeatTimingSample BeatTimingSample { get; private set; }
@@ -121,7 +120,6 @@ public sealed class WatchMetricsUpdate
     internal void SetCMarkerText(string text)
     {
         CMarkerText = text;
-        CMarkerTextUpdated = true;
     }
 
     internal void SetBeatTimingSample(BeatTimingSample sample)
