@@ -506,51 +506,6 @@ public sealed class TgDetector
         Process(silent, result);
     }
 
-    // tg_reset
-    public void Reset()
-    {
-        _hpf.Reset();
-        _env.Reset();
-        _det.Reset();
-        _det.SetMinSilence(0.020);
-        _det.SetMinAInterval(0.0);
-        _sync.Init();
-        _currentBph = 0;
-        _currentBeatPeriod = 0.0;
-        _evHistoryCount = 0;
-        _evHistoryHead = 0;
-        if (_delayBuf != null && _delayCapacity != 0)
-            Array.Clear(_delayBuf, 0, _delayCapacity);
-        _delayWriteIdx = 0;
-        _delayFilled = 0;
-        _totalEnvSamplesIn = 0;
-    }
-
-    /* tg_get/set_onset_fraction etc. ([0.001,0.9] clamp inside the core). */
-    public double OnsetFraction
-    {
-        get => _det.GetOnsetFraction();
-        set => _det.SetOnsetFraction(value);
-    }
-
-    public double MinPeakFraction
-    {
-        get => _det.GetMinPeakFraction();
-        set => _det.SetMinPeakFraction(value);
-    }
-
-    // tg_get/set_c_placement
-    public TgCPlacement CPlacement
-    {
-        get => _cfg.CPlacement;
-        set
-        {
-            // tg_set_c_placement: ignore invalid enum values.
-            if (value != TgCPlacement.Peak && value != TgCPlacement.Onset) return;
-            _cfg.CPlacement = value;
-        }
-    }
-
     /* ----- result helpers ------------------------------------------------ */
 
     /* Clear the reusable TgResult (memset(result, 0, sizeof) equivalent). */

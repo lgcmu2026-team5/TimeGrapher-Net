@@ -132,7 +132,6 @@ internal sealed class TgDetectorCore
 
     /* misc */
     public double PrevSample;
-    public ulong LastEventSample;
     public ulong TotalSamples;
 
     // tg_detector_reset
@@ -155,7 +154,6 @@ internal sealed class TgDetectorCore
         BurstCYPlus1 = 0.0;
         CHavePeakPlus1 = 0;
         PrevSample = 0.0;
-        LastEventSample = 0;
         TotalSamples = 0;
         /* Start with a large virtual silence credit so the first real tick
          * isn't blocked by the silence gate. */
@@ -566,12 +564,6 @@ internal sealed class TgDetectorCore
         ComputeThresholds(out effNoise, out refPeak, out _, out onsetThr, out minPeakThr);
     }
 
-    // tg_detector_get_onset_fraction
-    public double GetOnsetFraction() => OnsetFraction;
-
-    // tg_detector_get_min_peak_fraction
-    public double GetMinPeakFraction() => MinPeakFraction;
-
     // clamp_fraction
     private static double ClampFraction(double f)
     {
@@ -825,7 +817,6 @@ internal sealed class TgDetectorCore
                             ev.OnsetValid = onsetValid;
                             produced++;
                         }
-                        LastEventSample = cMaxIdx;
                         /* Credit the wall-clock time since peak toward the
                          * next silence gate. */
                         SilenceSamples = samplesSincePeak;
