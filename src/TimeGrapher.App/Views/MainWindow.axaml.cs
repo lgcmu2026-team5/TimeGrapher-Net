@@ -388,11 +388,13 @@ public partial class MainWindow : Window
 
     // --- Helpers ---
 
-    private static double ParseDouble(string? text)
+    internal static double ParseDouble(string? text)
     {
-        // QString::toDouble returns 0.0 on failure.
+        // QString::toDouble returns 0.0 on failure. NumberStyles.Float matches
+        // its C-locale grammar; Any would also take group separators ("0,5" ->
+        // 5.0) and parenthesized negation ("(500)" -> -500).
         if (string.IsNullOrEmpty(text)) return 0.0;
-        return double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out double v) ? v : 0.0;
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : 0.0;
     }
 
     private AnalysisRunSettings BuildRunSettings()
