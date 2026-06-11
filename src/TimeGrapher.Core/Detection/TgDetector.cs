@@ -35,7 +35,6 @@ public sealed class TgDetector
     private readonly TgSync _sync;
     private int _currentBph;
     private double _currentBeatPeriod;
-    private double _currentAcOffset;
 
     /* Working buffers (HPF output, envelope pre-delay). */
     private float[] _bufFilt = Array.Empty<float>();
@@ -62,8 +61,6 @@ public sealed class TgDetector
     private readonly double[] _evHistory = new double[TG_EVENT_HISTORY];
     private int _evHistoryHead;
     private int _evHistoryCount;
-
-    private ulong _totalSamplesProcessed;
 
     // tg_init
     public TgDetector(TgConfig cfg)
@@ -294,7 +291,6 @@ public sealed class TgDetector
             /* Flush library-level state too. */
             _currentBph = 0;
             _currentBeatPeriod = 0.0;
-            _currentAcOffset = 0.0;
             _evHistoryCount = 0;
             _evHistoryHead = 0;
             _sync.Reset();
@@ -363,7 +359,6 @@ public sealed class TgDetector
                            _cfg.PllPeriodGain, _cfg.PllAcGain);
                 _currentBph = matched;
                 _currentBeatPeriod = matchedPeriod;
-                _currentAcOffset = ac;
                 result.SyncAcquiredEvent = true;
 
                 /* Tighten the silence and A-to-A gates now that BPH is known. */
@@ -402,7 +397,6 @@ public sealed class TgDetector
             result.SyncLostEvent = true;
             _currentBph = 0;
             _currentBeatPeriod = 0.0;
-            _currentAcOffset = 0.0;
             _evHistoryCount = 0;
             _evHistoryHead = 0;
             _det.SetMinSilence(0.020);
@@ -497,8 +491,6 @@ public sealed class TgDetector
             result.NoiseFloor = (float)effNoise;
             result.ReferencePeak = (float)refPeak;
         }
-
-        _totalSamplesProcessed += (ulong)numSamples;
     }
 
     // tg_flush
@@ -525,7 +517,6 @@ public sealed class TgDetector
         _sync.Init();
         _currentBph = 0;
         _currentBeatPeriod = 0.0;
-        _currentAcOffset = 0.0;
         _evHistoryCount = 0;
         _evHistoryHead = 0;
         if (_delayBuf != null && _delayCapacity != 0)
@@ -533,7 +524,6 @@ public sealed class TgDetector
         _delayWriteIdx = 0;
         _delayFilled = 0;
         _totalEnvSamplesIn = 0;
-        _totalSamplesProcessed = 0;
     }
 
     /* tg_get/set_onset_fraction etc. ([0.001,0.9] clamp inside the core). */
