@@ -267,9 +267,6 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
         return AudioSampleRates.Standard;
     }
 
-    [Obsolete("Use GetCandidateSampleRates; live capture support is validated by Start().")]
-    public static IReadOnlyList<int> GetSupportedSampleRates(int deviceNumber) => GetCandidateSampleRates(deviceNumber);
-
     private static void StopAndDispose(WaveInEvent audioInput)
     {
         try
