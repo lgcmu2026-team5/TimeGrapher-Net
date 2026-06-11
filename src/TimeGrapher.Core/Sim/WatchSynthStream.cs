@@ -304,9 +304,6 @@ public sealed class WatchSynthStream
 
     public static bool IsSupportedRate(uint sr) => sr >= WsMinSr && sr <= WsMaxSr;
 
-    public static string EventKindName(WatchSynthEventKind k)
-        => k == WatchSynthEventKind.Tick ? "Tick" : "Tock";
-
     /*
         SplitMix64 pseudo-random generator (ws_next_u64).
         Deterministic, tiny, portable, adequate for repeatable synthetic jitter/noise.
@@ -438,9 +435,6 @@ public sealed class WatchSynthStream
         _resonator2S1 = _resonator2S2 = 0.0;
         _noiseLpState = _noiseHpLowState = 0.0;
     }
-
-    public ulong CurrentSampleIndex => _absoluteSampleIndex;
-    public double CurrentTimeS => (double)_absoluteSampleIndex / (double)_cfg.SampleRateHz;
 
     // llround(): round half away from zero, then truncate to integer (C long long).
     private static long Llround(double v) => (long)Math.Round(v, MidpointRounding.AwayFromZero);
