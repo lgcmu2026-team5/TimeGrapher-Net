@@ -32,42 +32,6 @@ internal static class Bph
         return false;
     }
 
-    // tg_bph_match
-    public static int Match(double candidateBph, int[] list, int listLen, double tolerancePct)
-    {
-        if (candidateBph <= 0.0 || listLen == 0) return 0;
-
-        int best = 0;
-        double bestErr = 1e30;
-        for (int i = 0; i < listLen; ++i)
-        {
-            double err = Math.Abs(candidateBph - (double)list[i]) / (double)list[i];
-            if (err < bestErr)
-            {
-                bestErr = err;
-                best = list[i];
-            }
-        }
-        if (bestErr * 100.0 <= tolerancePct) return best;
-        return 0;
-    }
-
-    // tg_estimate_beat_period
-    // For events ACACAC..., t[i+2] - t[i] == beat period. Median of deltas.
-    public static double EstimateBeatPeriod(ReadOnlySpan<double> eventTimes, int n)
-    {
-        if (n < 4) return 0.0;
-        int m = n - 2;
-        double[] deltas = new double[m];
-        for (int i = 0; i < m; ++i)
-        {
-            deltas[i] = eventTimes[i + 2] - eventTimes[i];
-        }
-        Array.Sort(deltas); // qsort with double comparator
-        double med = deltas[m / 2];
-        return med;
-    }
-
     /* Phase score: fold event times mod period and measure how
      * concentrated the resulting phases are using the standard Rayleigh
      * statistic.
@@ -265,21 +229,6 @@ internal sealed class TgSync
         if (ConsecutiveMisses >= MaxMisses)
         {
             Synced = 0;
-        }
-        return 0;
-    }
-
-    // tg_sync_check_timeout
-    public int CheckTimeout(double streamTime)
-    {
-        if (Synced == 0) return 0;
-        int timeoutBeats = MaxMisses / 2;
-        if (timeoutBeats < 3) timeoutBeats = 3;
-        double timeout = (double)timeoutBeats * BeatPeriod;
-        if (streamTime - LastMatchTime > timeout)
-        {
-            Synced = 0;
-            return 1;
         }
         return 0;
     }
