@@ -410,11 +410,6 @@ public sealed class SoundImageRenderer
         _activeMarkers.Clear();
     }
 
-    public void SetSoundColor(uint color)
-    {
-        _cfg.SoundColor = color;
-    }
-
     /// <summary>
     /// Enables/disables the live redraw of the in-progress column. Used by the
     /// deadline-degradation ladder; call on the rendering thread between frames.
@@ -480,43 +475,6 @@ public sealed class SoundImageRenderer
             {
                 ClearWholeImage(_cfg.BackgroundColor);
             }
-        }
-    }
-
-    public void SetSampleRate(double sampleRateHz)
-    {
-        if (sampleRateHz <= 0.0)
-        {
-            return;
-        }
-
-        double oldRate = _cfg.SampleRateHz;
-        _cfg.SampleRateHz = sampleRateHz;
-        RecomputeDerived();
-
-        if (oldRate != sampleRateHz && _bphValid)
-        {
-            ClearRenderStateKeepingSampleCounter();
-            if (_image != null)
-            {
-                ClearWholeImage(_cfg.BackgroundColor);
-            }
-        }
-    }
-
-    public void SetVerticalTimeDirection(VerticalTimeDirection direction)
-    {
-        if (_cfg.Direction == direction)
-        {
-            return;
-        }
-
-        _cfg.Direction = direction;
-
-        if (_image != null)
-        {
-            ClearRenderStateKeepingSampleCounter();
-            ClearWholeImage(_cfg.BackgroundColor);
         }
     }
 
@@ -1363,26 +1321,13 @@ public sealed class SoundImageRenderer
         AddPersistentMarkerFromAbsoluteSample(absoluteSampleIndex, color, markerSidePixels);
     }
 
-    // --- Accessors (mirror the C++ inline getters) ---
+    // --- Accessors (the consumed subset of the C++ inline getters) ---
 
-    public int ImageWidth => _width;
-    public int ImageHeight => _height;
-    public int CurrentColumn => _writeColumn;
-    public int LastCompletedColumn => _lastCompletedColumn;
-
-    public ulong StreamOriginSampleIndex => _streamOriginSampleIndex;
-    public ulong ProcessedSamplesSinceReset => _processedSamplesSinceReset;
     public ulong NextInputAbsoluteSampleIndex() => _streamOriginSampleIndex + _processedSamplesSinceReset;
 
-    public long CurrentBeatIndex => _activeColumnIndex;
     public bool BandCenterLocked => _centerLocked;
-    public int CurrentVerticalOffsetRows => _internalVerticalOffsetRows;
 
-    public bool BphValid => _bphValid;
     public double CurrentBph => _bphValid ? _cfg.Bph : 0.0;
-    public double SamplesPerColumnExact => _samplesPerColumnExact;
-
-    public VerticalTimeDirection Direction => _cfg.Direction;
 
     // --- Rounding helpers matching C++ std::llround / std::lround (round half away from zero) ---
 
