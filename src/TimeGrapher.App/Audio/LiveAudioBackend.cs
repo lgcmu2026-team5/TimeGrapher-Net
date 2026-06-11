@@ -29,14 +29,7 @@ internal static class LiveAudioBackend
 #if TIMEGRAPHER_WINDOWS_AUDIO
         if (OperatingSystem.IsWindows())
         {
-            IReadOnlyList<string> names = AudioCaptureWorker.EnumerateInputDevices();
-            var devices = new List<LiveAudioDevice>(names.Count);
-            for (int i = 0; i < names.Count; i++)
-            {
-                devices.Add(new LiveAudioDevice(i, names[i]));
-            }
-
-            return devices;
+            return AudioCaptureWorker.EnumerateInputDevices();
         }
 #endif
 

@@ -250,16 +250,16 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
         Stop();
     }
 
-    /// <summary>WaveIn device names, indexed by device number.</summary>
-    public static IReadOnlyList<string> EnumerateInputDevices()
+    /// <summary>WaveIn devices; the device number is the WaveIn index.</summary>
+    public static IReadOnlyList<LiveAudioDevice> EnumerateInputDevices()
     {
         int count = WaveInEvent.DeviceCount;
-        var names = new List<string>(count);
+        var devices = new List<LiveAudioDevice>(count);
         for (int i = 0; i < count; i++)
         {
-            names.Add(WaveInEvent.GetCapabilities(i).ProductName);
+            devices.Add(new LiveAudioDevice(i, WaveInEvent.GetCapabilities(i).ProductName));
         }
-        return names;
+        return devices;
     }
 
     /// <summary>
