@@ -19,8 +19,6 @@ public static class BphCatalog
 
     private static readonly int[] ManualAutoBphValues = CreateManualAutoBphValues();
 
-    public static IReadOnlyList<int> AutoBph { get; } = Array.AsReadOnly(AutoBphValues);
-
     public static IReadOnlyList<int> ManualBph { get; } = Array.AsReadOnly(ManualBphValues);
 
     public static IReadOnlyList<int> ManualAutoBph { get; } = Array.AsReadOnly(ManualAutoBphValues);
