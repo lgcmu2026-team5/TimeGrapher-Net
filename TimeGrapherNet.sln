@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TimeGrapher.Platform.LinuxA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TimeGrapher.Platform.LinuxAudio.Tests", "tests\TimeGrapher.Platform.LinuxAudio.Tests\TimeGrapher.Platform.LinuxAudio.Tests.csproj", "{FD6A6C70-2DF8-4A98-836E-B5033F08AD94}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TimeGrapher.Platform.WindowsAudio.Tests", "tests\TimeGrapher.Platform.WindowsAudio.Tests\TimeGrapher.Platform.WindowsAudio.Tests.csproj", "{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -64,6 +66,10 @@ Global
 		{FD6A6C70-2DF8-4A98-836E-B5033F08AD94}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD6A6C70-2DF8-4A98-836E-B5033F08AD94}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD6A6C70-2DF8-4A98-836E-B5033F08AD94}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7C1E4464-F6F9-44E0-B865-8D273717ED6A} = {6F8CB6CB-3947-447D-98E4-EB96F60105C5}
@@ -74,5 +80,6 @@ Global
 		{BC5CE323-EBDC-4FD2-8A05-BA142B3179C7} = {6F8CB6CB-3947-447D-98E4-EB96F60105C5}
 		{F3A6BBAD-C109-40D1-B9C2-CCB8145007CC} = {6F8CB6CB-3947-447D-98E4-EB96F60105C5}
 		{FD6A6C70-2DF8-4A98-836E-B5033F08AD94} = {F3BAE50B-17BD-4B39-8349-13E8FA87CCD6}
+		{ECA97C8E-A9F5-4680-BA7E-7D201B8D9E33} = {F3BAE50B-17BD-4B39-8349-13E8FA87CCD6}
 	EndGlobalSection
 EndGlobal

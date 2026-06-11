@@ -25,6 +25,10 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
     // teardown instead of reporting success on the already-cleared _audioInput.
     // Start/Stop are serialized on the UI thread, so a plain field suffices.
     private Thread? _pendingStopThread;
+    // Test seam (mirrors LinuxLiveAudioWorker.StartCaptureProcessForTests):
+    // replaces the blocking StopAndDispose teardown so the TryStop
+    // pending-thread contract can be exercised without an audio device.
+    private Action? _teardownOverride;
     private float _volume = 1.0f;
     private volatile bool _paused;
     private volatile bool _stopRequested;
@@ -212,7 +216,7 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
 
         if (timeout == Timeout.InfiniteTimeSpan)
         {
-            StopAndDispose(audioInput);
+            TeardownCapture(audioInput);
             return true;
         }
 
@@ -223,7 +227,7 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
         {
             try
             {
-                StopAndDispose(audioInput);
+                TeardownCapture(audioInput);
             }
             catch (Exception ex)
             {
@@ -248,6 +252,29 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
     public void Dispose()
     {
         Stop();
+    }
+
+    private void TeardownCapture(WaveInEvent audioInput)
+    {
+        Action? teardownOverride = _teardownOverride;
+        if (teardownOverride != null)
+        {
+            teardownOverride();
+            return;
+        }
+
+        StopAndDispose(audioInput);
+    }
+
+    /// <summary>
+    /// Installs a fake active capture whose teardown is the given action, so
+    /// tests can drive the TryStop timeout/retry/fall-through contract with a
+    /// controllable blocking delegate instead of a real device.
+    /// </summary>
+    internal void InstallCaptureForTests(Action teardown)
+    {
+        _audioInput = new WaveInEvent();
+        _teardownOverride = teardown;
     }
 
     /// <summary>WaveIn devices; the device number is the WaveIn index.</summary>
