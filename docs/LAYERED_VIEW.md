@@ -29,7 +29,7 @@ flowchart TB
 
     subgraph L4["Layer 4 - External technology services"]
         direction TB
-        UiLibraries["Avalonia / ScottPlot / Tmds.DBus.Protocol<br/>desktop UI, plotting,<br/>Linux desktop protocol support"]
+        UiLibraries["Avalonia / ScottPlot<br/>desktop UI, plotting"]
         WindowsLibraries["NAudio<br/>Windows audio APIs"]
         LinuxServices["PipeWire / ALSA tools<br/>wpctl, pw-record, arecord"]
         TestFramework["xUnit<br/>test framework"]
@@ -49,7 +49,7 @@ flowchart TB
 | Layer 1 - Entry points, presentation, validation | `TimeGrapher.App`, `TimeGrapher.Verify`, `*.Tests` | User interaction, tab/frame routing, live-audio backend selection, headless verification, and regression validation |
 | Layer 2 - Platform adapter layer | `TimeGrapher.Platform.WindowsAudio`, `TimeGrapher.Platform.LinuxAudio` | OS-specific live-audio input behind Core audio contracts |
 | Layer 3 - Portable core services | `TimeGrapher.Core` submodules | UI/OS-independent watch sound analysis, WAV I/O, simulation, metrics, shared frame DTOs, and audio contracts |
-| Layer 4 - External technology services | Avalonia, ScottPlot, Tmds.DBus.Protocol, NAudio, PipeWire/ALSA tools, xUnit | Framework, OS, plotting, desktop protocol, audio, and testing capabilities supplied from outside the project |
+| Layer 4 - External technology services | Avalonia, ScottPlot, NAudio, PipeWire/ALSA tools, xUnit | Framework, OS, plotting, audio, and testing capabilities supplied from outside the project |
 
 ## Allowed dependency rules
 
@@ -57,7 +57,7 @@ flowchart TB
 |---|---|
 | Layer 1 can use Layer 2 | `TimeGrapher.App` conditionally references Windows or Linux live-audio adapters through `RuntimeIdentifier`/compile constants; the WindowsAudio/LinuxAudio test projects validate their platform adapters |
 | Layer 1 can use Layer 3 | The UI and verification console can call Core analysis, WAV, simulation, detection, and shared DTO modules such as `AnalysisFrame` and `BeatMetricsHistorySnapshot` |
-| Layer 1 can use Layer 4 | UI code can use Avalonia, ScottPlot, and the App-level `Tmds.DBus.Protocol` package; tests can use xUnit |
+| Layer 1 can use Layer 4 | UI code can use Avalonia and ScottPlot; tests can use xUnit |
 | Layer 2 can use Layer 3 | Platform adapters implement Core live-audio contracts from `Core.Shared` |
 | Layer 2 can use Layer 4 | The Windows adapter calls NAudio; the Linux adapter launches PipeWire/ALSA command-line tools (`wpctl`, `pw-record`, `arecord`) |
 

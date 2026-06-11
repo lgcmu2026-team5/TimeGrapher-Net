@@ -244,7 +244,6 @@ For deeper design background and the Qt→.NET porting story, see the `docs/` fo
 | Avalonia(.Desktop/.Themes.Fluent) | 11.3.17 | UI framework |
 | ScottPlot.Avalonia | 5.0.55 | Scope/rate graphs |
 | NAudio.Wasapi / NAudio.WinMM | 2.2.1 | Windows mic capture & volume |
-| Tmds.DBus.Protocol | 0.21.3 | Linux audio helper |
 | xunit / xunit.runner.visualstudio | 2.9.2 / 2.8.2 | Testing |
 | Microsoft.NET.Test.Sdk | 17.12.0 | Test host |
 

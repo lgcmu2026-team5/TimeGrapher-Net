@@ -27,7 +27,6 @@ flowchart TB
         direction TB
         Avalonia["Avalonia"]
         ScottPlot["ScottPlot.Avalonia"]
-        TmdsDbus["Tmds.DBus.Protocol"]
         NAudio["NAudio"]
         LinuxAudioStack["PipeWire / ALSA tools<br/>wpctl · pw-record · arecord"]
         Xunit["xUnit"]
@@ -50,7 +49,6 @@ flowchart TB
 
     App --> Avalonia
     App --> ScottPlot
-    App --> TmdsDbus
     WindowsAudio --> NAudio
     LinuxAudio --> LinuxAudioStack
     AppTests --> Avalonia
@@ -154,7 +152,7 @@ flowchart TB
 
 | Using module | Used module(s) | Coupling created |
 |---|---|---|
-| `TimeGrapher.App` | `TimeGrapher.Core`, RID-selected platform audio backends, Avalonia, ScottPlot, Tmds.DBus.Protocol | UI is coupled to Core contracts/results, desktop UI libraries, and selected platform audio adapters |
+| `TimeGrapher.App` | `TimeGrapher.Core`, RID-selected platform audio backends, Avalonia, ScottPlot | UI is coupled to Core contracts/results, desktop UI libraries, and selected platform audio adapters |
 | `TimeGrapher.Verify` | `TimeGrapher.Core` | Console verification shares the same analysis, detection, WAV, and simulator modules as the app |
 | `TimeGrapher.Platform.WindowsAudio` | `TimeGrapher.Core.Shared`, NAudio | Windows input backend is coupled to Core live-audio contracts and NAudio APIs |
 | `TimeGrapher.Platform.LinuxAudio` | `TimeGrapher.Core.Shared`, `wpctl`, `pw-record`, `arecord` | Linux input backend is coupled to Core live-audio contracts and Linux audio command-line tools |

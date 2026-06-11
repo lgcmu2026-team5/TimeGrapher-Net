@@ -258,6 +258,14 @@
         "resolved": "4.7.0",
         "contentHash": "ojD0PX0XhneCsUbAZVKdb7h/70vyYMDYs85lwEI+LngEONe/17A0cFaRFqZU+sOEidcVswYWikYOQ9PPfjlbtQ=="
       },
+      "Tmds.DBus.Protocol": {
+        "type": "Transitive",
+        "resolved": "0.21.3",
+        "contentHash": "hDwB8WsQoyALQKqIbwzS68UKdlnafDm4T/DkO/JrA/YIneP/rKv96SxYPVXeh3FP4i/SXfShrYftKLtciJAIlw==",
+        "dependencies": {
+          "System.IO.Pipelines": "8.0.0"
+        }
+      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -307,8 +315,7 @@
           "ScottPlot.Avalonia": "[5.0.55, )",
           "TimeGrapher.Core": "[0.5.0, )",
           "TimeGrapher.Platform.LinuxAudio": "[0.5.0, )",
-          "TimeGrapher.Platform.WindowsAudio": "[0.5.0, )",
-          "Tmds.DBus.Protocol": "[0.21.3, )"
+          "TimeGrapher.Platform.WindowsAudio": "[0.5.0, )"
         }
       },
       "timegrapher.core": {
@@ -389,15 +396,6 @@
           "Avalonia": "11.0.2",
           "Avalonia.Skia": "11.0.2",
           "ScottPlot": "5.0.55"
-        }
-      },
-      "Tmds.DBus.Protocol": {
-        "type": "CentralTransitive",
-        "requested": "[0.21.3, )",
-        "resolved": "0.21.3",
-        "contentHash": "hDwB8WsQoyALQKqIbwzS68UKdlnafDm4T/DkO/JrA/YIneP/rKv96SxYPVXeh3FP4i/SXfShrYftKLtciJAIlw==",
-        "dependencies": {
-          "System.IO.Pipelines": "8.0.0"
         }
       }
     }

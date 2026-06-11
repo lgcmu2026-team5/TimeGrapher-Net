@@ -240,7 +240,6 @@ classDiagram
 | Avalonia(.Desktop/.Themes.Fluent) | 11.3.17 | UI 프레임워크 |
 | ScottPlot.Avalonia | 5.0.55 | 스코프/레이트 그래프 |
 | NAudio.Wasapi / NAudio.WinMM | 2.2.1 | Windows 마이크 캡처·볼륨 |
-| Tmds.DBus.Protocol | 0.21.3 | Linux 오디오 보조 |
 | xunit / xunit.runner.visualstudio | 2.9.2 / 2.8.2 | 테스트 |
 | Microsoft.NET.Test.Sdk | 17.12.0 | 테스트 호스트 |
 
