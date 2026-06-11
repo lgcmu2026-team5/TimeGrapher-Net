@@ -267,22 +267,23 @@ internal sealed class EscapementAnalyzerRenderer
             _envelopeScatter.LineColor = Color.FromARGB(_theme.TraceWave);
         }
 
-        // A = green, C = red: the same event color contract as the scope markers.
+        // A = tick green, C = tock red: the same themed event color mapping the
+        // scope markers use (RateScopeRenderer.ThemeColor).
         if (_aMarker != null)
         {
-            _aMarker.LineColor = Color.FromARGB(Argb.Green);
+            _aMarker.LineColor = Color.FromARGB(_theme.TraceTick);
         }
 
         if (_aLabel != null)
         {
-            _aLabel.LabelFontColor = Color.FromARGB(Argb.Green);
+            _aLabel.LabelFontColor = Color.FromARGB(_theme.TraceTick);
         }
 
         foreach (VerticalLine? marker in new[] { _cPeakMarker, _cOnsetMarker })
         {
             if (marker != null)
             {
-                marker.LineColor = Color.FromARGB(Argb.Red);
+                marker.LineColor = Color.FromARGB(_theme.TraceTock);
             }
         }
 
@@ -290,7 +291,7 @@ internal sealed class EscapementAnalyzerRenderer
         {
             if (label != null)
             {
-                label.LabelFontColor = Color.FromARGB(Argb.Red);
+                label.LabelFontColor = Color.FromARGB(_theme.TraceTock);
             }
         }
     }

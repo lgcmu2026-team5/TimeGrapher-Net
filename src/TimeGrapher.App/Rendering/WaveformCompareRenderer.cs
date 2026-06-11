@@ -327,25 +327,26 @@ internal sealed class WaveformCompareRenderer
             }
         }
 
-        // A = green, C = red: the same event color contract as the scope markers.
+        // A = tick green, C = tock red: the same themed event color mapping the
+        // scope markers use (RateScopeRenderer.ThemeColor).
         if (_aGuide != null)
         {
-            _aGuide.LineColor = Color.FromARGB(Argb.Green);
+            _aGuide.LineColor = Color.FromARGB(_theme.TraceTick);
         }
 
         if (_aGuideLabel != null)
         {
-            _aGuideLabel.LabelFontColor = Color.FromARGB(Argb.Green);
+            _aGuideLabel.LabelFontColor = Color.FromARGB(_theme.TraceTick);
         }
 
         if (_cMeanGuide != null)
         {
-            _cMeanGuide.LineColor = Color.FromARGB(Argb.Red);
+            _cMeanGuide.LineColor = Color.FromARGB(_theme.TraceTock);
         }
 
         if (_cMeanGuideLabel != null)
         {
-            _cMeanGuideLabel.LabelFontColor = Color.FromARGB(Argb.Red);
+            _cMeanGuideLabel.LabelFontColor = Color.FromARGB(_theme.TraceTock);
         }
 
         _reviewCursor?.ApplyTheme(_theme);

@@ -472,20 +472,21 @@ internal sealed class BeatNoiseScopeRenderer
             _mirrorScatter.LineColor = Color.FromARGB(_theme.TraceWave);
         }
 
-        // A = green, C = red: the same event color contract as the scope markers.
+        // A = tick green, C = tock red: the same themed event color mapping the
+        // scope markers use (RateScopeRenderer.ThemeColor).
         if (_aMarker != null)
         {
-            _aMarker.LineColor = Color.FromARGB(Argb.Green);
+            _aMarker.LineColor = Color.FromARGB(_theme.TraceTick);
         }
 
         if (_cPeakMarker != null)
         {
-            _cPeakMarker.LineColor = Color.FromARGB(Argb.Red);
+            _cPeakMarker.LineColor = Color.FromARGB(_theme.TraceTock);
         }
 
         if (_cOnsetMarker != null)
         {
-            _cOnsetMarker.LineColor = Color.FromARGB(Argb.Red);
+            _cOnsetMarker.LineColor = Color.FromARGB(_theme.TraceTock);
         }
 
         foreach (Scatter? strip in _stripScatters)
