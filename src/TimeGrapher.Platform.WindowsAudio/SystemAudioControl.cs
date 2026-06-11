@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using NAudio.CoreAudioApi;
 
 namespace TimeGrapher.Platform.WindowsAudio;
 
 /// <summary>
-/// System (endpoint) audio control. Port of WindowsAudio.cpp's WindowsSetSoundParameters /
-/// WindowsListSoundCardsAndElements, using NAudio's CoreAudioApi
+/// System (endpoint) audio control. Port of WindowsAudio.cpp's WindowsSetSoundParameters,
+/// using NAudio's CoreAudioApi
 /// (<see cref="MMDeviceEnumerator"/> / <see cref="AudioEndpointVolume"/>) instead of raw COM.
 ///
 /// Best-effort, like the original: any failure is swallowed silently. The original also
@@ -38,43 +37,6 @@ public static class SystemAudioControl
             using (matched)
             {
                 SetEndpointVolumePercent(matched, volumePercent);
-            }
-        }
-        catch
-        {
-            // best-effort: swallow
-        }
-    }
-
-    /// <summary>Diagnostic dump of active capture endpoints (WindowsListSoundCardsAndElements).</summary>
-    public static void ListSoundCardsAndElements()
-    {
-        try
-        {
-            using var enumerator = new MMDeviceEnumerator();
-            var collection = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
-            int count = collection.Count;
-
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("==== Capture/Microphone devices: " + count + " active ====");
-            Console.Error.WriteLine();
-
-            for (int i = 0; i < count; ++i)
-            {
-                MMDevice device = collection[i];
-                using (device)
-                {
-                    Console.Error.WriteLine("[" + i + "]");
-                    PrintAudioDeviceInfo(device);
-
-                    float percent;
-                    if (TryGetEndpointVolumePercent(device, out percent))
-                    {
-                        Console.Error.WriteLine("  Endpoint volume        : " +
-                            percent.ToString("F1", CultureInfo.InvariantCulture) + "%");
-                    }
-                    Console.Error.WriteLine();
-                }
             }
         }
         catch
@@ -243,28 +205,6 @@ public static class SystemAudioControl
         if (percent > 100.0f) percent = 100.0f;
         float scalar = percent / 100.0f;
         device.AudioEndpointVolume.MasterVolumeLevelScalar = scalar;
-    }
-
-    private static bool TryGetEndpointVolumePercent(MMDevice device, out float percent)
-    {
-        percent = 0.0f;
-        try
-        {
-            percent = device.AudioEndpointVolume.MasterVolumeLevelScalar * 100.0f;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static void PrintAudioDeviceInfo(MMDevice device)
-    {
-        Console.Error.WriteLine("  Endpoint friendly name : " + SafeFriendlyName(device));
-        Console.Error.WriteLine("  Device name            : " + SafeDeviceFriendlyName(device));
-        Console.Error.WriteLine("  Flow                   : Capture/Microphone");
-        Console.Error.WriteLine("  Endpoint ID            : " + SafeId(device));
     }
 
     private static string SafeFriendlyName(MMDevice d)
