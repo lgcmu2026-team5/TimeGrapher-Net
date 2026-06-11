@@ -277,6 +277,9 @@ public sealed class AudioCaptureWorker : ILiveAudioWorker
         _teardownOverride = teardown;
     }
 
+    /// <summary>Test hook: drives OnRecordingStopped as NAudio would on its callback thread.</summary>
+    internal void RaiseRecordingStoppedForTests() => OnRecordingStopped(this, new StoppedEventArgs());
+
     /// <summary>WaveIn devices; the device number is the WaveIn index.</summary>
     public static IReadOnlyList<LiveAudioDevice> EnumerateInputDevices()
     {

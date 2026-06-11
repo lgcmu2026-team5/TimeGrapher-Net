@@ -84,6 +84,45 @@ public sealed class AudioCaptureWorkerTests
     }
 
     [Fact]
+    public void CaptureEnded_RaisedWhenRecordingStopsWithoutStopRequest()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var worker = new AudioCaptureWorker(new MasterAudioBuffer(48000));
+        bool raised = false;
+        worker.CaptureEnded += () => raised = true;
+
+        // Device error/unplug: NAudio stops recording with no stop requested.
+        worker.RaiseRecordingStoppedForTests();
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void CaptureEnded_NotRaisedForRequestedStop()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var worker = new AudioCaptureWorker(new MasterAudioBuffer(48000));
+        bool raised = false;
+        worker.CaptureEnded += () => raised = true;
+        worker.InstallCaptureForTests(() => { });
+
+        Assert.True(worker.TryStop(TimeSpan.FromSeconds(5)));
+
+        // A late RecordingStopped from the stopped device must stay suppressed.
+        worker.RaiseRecordingStoppedForTests();
+
+        Assert.False(raised);
+    }
+
+    [Fact]
     public void TryStop_WithoutActiveCaptureReportsSuccess()
     {
         if (!OperatingSystem.IsWindows())
