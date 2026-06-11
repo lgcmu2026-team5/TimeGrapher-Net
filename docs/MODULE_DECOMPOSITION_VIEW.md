@@ -81,10 +81,12 @@ flowchart TB
                 direction TB
                 AppTests["TimeGrapher.App.Tests<br/>UI support, services,<br/>rendering tests"]
                 CoreTests["TimeGrapher.Core.Tests<br/>analysis, WAV,<br/>detector contract tests"]
+                WindowsAudioTests["TimeGrapher.Platform.WindowsAudio.Tests<br/>Windows audio backend tests"]
                 LinuxAudioTests["TimeGrapher.Platform.LinuxAudio.Tests<br/>Linux audio backend tests"]
 
                 AppTests ~~~ CoreTests
-                CoreTests ~~~ LinuxAudioTests
+                CoreTests ~~~ WindowsAudioTests
+                WindowsAudioTests ~~~ LinuxAudioTests
             end
 
             subgraph Support["supporting artifacts"]
@@ -117,5 +119,5 @@ flowchart TB
 | `TimeGrapher.Platform.WindowsAudio` | `AudioCaptureWorker`, `SystemAudioControl` | Windows live microphone capture and system-volume integration behind Core live-audio contracts |
 | `TimeGrapher.Platform.LinuxAudio` | `LinuxLiveAudioWorker` | Linux live microphone capture through PipeWire/ALSA command-line tools behind Core live-audio contracts |
 | `TimeGrapher.Verify` | console entry point | Headless generated/WAV verification tool that exercises the Core detection and metrics pipeline |
-| `tests` | `TimeGrapher.App.Tests`, `TimeGrapher.Core.Tests`, `TimeGrapher.Platform.LinuxAudio.Tests` | Regression tests for UI support/services/rendering/tabs, Core analysis contracts, and Linux audio behavior |
+| `tests` | `TimeGrapher.App.Tests`, `TimeGrapher.Core.Tests`, `TimeGrapher.Platform.WindowsAudio.Tests`, `TimeGrapher.Platform.LinuxAudio.Tests` | Regression tests for UI support/services/rendering/tabs, Core analysis contracts, and Windows/Linux audio behavior |
 | supporting artifacts | `docs`, `deploy/linux`, `.github/workflows`, root build config, `TimeGrapherTestFilesWeishiMic` | Architecture/course documentation, Raspberry Pi deployment integration, CI/release automation, shared build metadata, and manual WAV fixtures |

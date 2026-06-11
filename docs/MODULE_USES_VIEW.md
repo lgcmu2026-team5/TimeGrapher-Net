@@ -19,6 +19,7 @@ flowchart TB
         direction TB
         AppTests["TimeGrapher.App.Tests"]
         CoreTests["TimeGrapher.Core.Tests"]
+        WindowsAudioTests["TimeGrapher.Platform.WindowsAudio.Tests"]
         LinuxAudioTests["TimeGrapher.Platform.LinuxAudio.Tests"]
     end
 
@@ -42,6 +43,8 @@ flowchart TB
     AppTests --> App
     AppTests --> Core
     CoreTests --> Core
+    WindowsAudioTests --> WindowsAudio
+    WindowsAudioTests --> Core
     LinuxAudioTests --> LinuxAudio
     LinuxAudioTests --> Core
 
@@ -54,6 +57,7 @@ flowchart TB
     AppTests --> ScottPlot
     AppTests --> Xunit
     CoreTests --> Xunit
+    WindowsAudioTests --> Xunit
     LinuxAudioTests --> Xunit
 ```
 
