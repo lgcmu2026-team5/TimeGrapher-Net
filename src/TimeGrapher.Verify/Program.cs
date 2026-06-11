@@ -13,6 +13,7 @@ using System.Text.RegularExpressions;
 using TimeGrapher.Core.Analysis;
 using TimeGrapher.Core.AudioIo;
 using TimeGrapher.Core.Detection;
+using TimeGrapher.Core.Metrics;
 using TimeGrapher.Core.Sim;
 
 const int DetectorNumberOfSamples = 4096;
@@ -112,9 +113,14 @@ try
         }
 
         string name = Path.GetFileName(file);
+        // BuildResults wraps live values in ValueSpanStart/End markers that the
+        // GUI strips before display; this console report is a display surface too.
+        string cleanResults = resultsText
+            .Replace(WatchMetrics.ValueSpanStart.ToString(), "")
+            .Replace(WatchMetrics.ValueSpanEnd.ToString(), "");
         Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
             "{0}: detected_bph={1} sync_status={2} results=[{3}]",
-            name, detectedBph, syncStatus, resultsText));
+            name, detectedBph, syncStatus, cleanResults));
 
         if (syncStatus != TgSyncStatus.Synced)
         {
