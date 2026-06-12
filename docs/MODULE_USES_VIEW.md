@@ -100,7 +100,6 @@ flowchart TB
     Views --> Audio
     Views --> Tabs
     Views --> Rendering
-    Views --> CoreAnalysis
     Views --> CoreAudioIo
     Views --> CoreDetection
     Views --> CoreShared
