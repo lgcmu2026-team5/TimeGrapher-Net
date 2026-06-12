@@ -134,9 +134,6 @@ public sealed class TgDetector
             _det.AdaptiveFloorMinMul = options.AdaptiveFloorMinMul;
             _det.RefDecayAfterS = options.RefDecayAfterS;
             _det.RefDecayTauS = options.RefDecayTauS;
-            _det.NoiseCensorEnabled = options.EnableNoiseCensor;
-            _det.NoiseCensorK = options.NoiseCensorK;
-            _det.NoiseCensorMaxRun = options.NoiseCensorMaxRun;
             _det.RegimeGuardEnabled = options.EnableRegimeGuard;
             _det.RegimeTripBeats = options.RegimeTripBeats;
         }

@@ -69,9 +69,6 @@ internal sealed class TgDetectorCore
     public double AdaptiveFloorMinMul;
     public double RefDecayAfterS;
     public double RefDecayTauS;
-    public bool NoiseCensorEnabled;
-    public double NoiseCensorK;
-    public int NoiseCensorMaxRun;
     public bool RegimeGuardEnabled;
     public int RegimeTripBeats;
 
@@ -262,9 +259,6 @@ internal sealed class TgDetectorCore
         AdaptiveFloorMinMul = 3.0;
         RefDecayAfterS = 2.0;
         RefDecayTauS = 5.0;
-        NoiseCensorEnabled = false;
-        NoiseCensorK = 3.5;
-        NoiseCensorMaxRun = 128;
         RegimeGuardEnabled = false;
         RegimeTripBeats = 3;
 

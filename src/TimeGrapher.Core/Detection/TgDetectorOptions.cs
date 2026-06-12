@@ -30,15 +30,6 @@ public sealed record TgDetectorOptions
     /// <summary>Exponential time constant of the reference-peak decay, seconds.</summary>
     public double RefDecayTauS { get; init; } = 5.0;
 
-    /* I-2 NoiseCensor: censored noise-ring updates keep sub-threshold tick
-     * energy from inflating the 75th-percentile noise estimate (the
-     * weak-signal positive-feedback lockout). */
-    public bool EnableNoiseCensor { get; init; }
-    /// <summary>Censor threshold in robust sigmas (median + K * IQR-sigma) above the silence median.</summary>
-    public double NoiseCensorK { get; init; } = 3.5;
-    /// <summary>Censored samples in a row before one is accepted unconditionally (bounded slew).</summary>
-    public int NoiseCensorMaxRun { get; init; } = 128;
-
     /* I-3 RegimeGuard: the instantaneous regime trip becomes a run-of-N
      * persistence counter so a single impulse cannot flush the detector. */
     public bool EnableRegimeGuard { get; init; }
