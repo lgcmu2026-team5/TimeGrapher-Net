@@ -165,6 +165,26 @@ public sealed class BeatEventGateTests
     }
 
     [Fact]
+    public void OversizedWindowRequest_StillReceivesFullWindowsWithTheEventInside()
+    {
+        // A post-window larger than the old fixed 0.5 s ring used to evict
+        // the event before its window was ready, silently handing the gate
+        // truncated windows with offset = -1 (the 'no window requested'
+        // sentinel). The ring is now sized from the request.
+        var gate = new ScriptedGate { PreMs = 20.0, PostMs = 600.0 };
+        Run(NewEngine(gate), 8);
+
+        Assert.NotEmpty(gate.Windows);
+        int preSamples = (int)(0.020 * 48000);
+        int postSamples = (int)(0.600 * 48000);
+        foreach ((int length, int offset, TgEventType _) in gate.Windows.Skip(4).SkipLast(8))
+        {
+            Assert.Equal(preSamples + postSamples + 1, length);
+            Assert.Equal(preSamples, offset);
+        }
+    }
+
+    [Fact]
     public void Flush_DeliversTheTailNothingStaysPending()
     {
         // Cut the stream right after a beat (t = 2.3833 s) whose burst is

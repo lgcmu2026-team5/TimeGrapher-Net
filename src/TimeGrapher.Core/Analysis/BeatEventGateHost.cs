@@ -57,7 +57,15 @@ internal sealed class BeatEventGateHost
         _windowed = _preSamples > 0 || _postSamples > 0;
         if (_windowed)
         {
-            _ring = new float[(int)(0.5 * sampleRate)];
+            /* The ring must out-size the requested window plus one second of
+             * block headroom (windowReady is checked at block granularity,
+             * so an append can overshoot the post-window by up to a block):
+             * a ring smaller than the request would evict the event before
+             * its window is ever ready, silently feeding the gate truncated
+             * windows with the offset = -1 'no window requested' sentinel. */
+            int capacity = Math.Max((int)(0.5 * sampleRate),
+                                    _preSamples + _postSamples + 1 + (int)sampleRate);
+            _ring = new float[capacity];
             _windowScratch = new float[_preSamples + _postSamples + 1];
         }
         else
