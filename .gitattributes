@@ -25,4 +25,5 @@
 *.ttf   binary
 *.otf   binary
 *.wav   binary
+*.mp4   binary
 *.dll   binary
