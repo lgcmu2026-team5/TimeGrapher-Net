@@ -94,6 +94,19 @@ public sealed class WatchSynthStreamConfig
     public double NoiseLowHz;            // Hz. Noise high-pass corner.
     public double NoiseHighHz;           // Hz. Noise low-pass corner.
 
+    /*
+        Impulsive background-noise model (door slams, desk knocks). Not part of
+        the original C generator; added for the adverse-condition verification
+        scenarios. Impulses are Poisson-scheduled damped sine bursts drawn from
+        a DEDICATED RNG stream so that enabling them leaves the tick timing,
+        jitter, and white-noise sequences bit-identical. Rate 0 disables the
+        model entirely: no RNG draws, output unchanged.
+    */
+    public double ImpulseNoiseRatePerSecond; // Poisson mean impulses per second. 0 = off.
+    public double ImpulseNoisePeakAmplitude; // normalized float PCM impulse peak, 0..1.
+    public double ImpulseNoiseFreqHz;        // damped-sine ringing frequency, Hz.
+    public double ImpulseNoiseDecayMs;       // exponential decay time constant, ms.
+
     /// <summary>
     /// Fill cfg with a low-variation test configuration (watch_synth_stream_clean_config).
     /// Best for verifying timing equations: jitter, wander, drift, resonance, and
@@ -150,7 +163,11 @@ public sealed class WatchSynthStreamConfig
             SensorResonance2Q = 4.5,
             SensorResonance2Gain = 0.0,
             NoiseLowHz = 700.0,
-            NoiseHighHz = 18000.0
+            NoiseHighHz = 18000.0,
+            ImpulseNoiseRatePerSecond = 0.0,
+            ImpulseNoisePeakAmplitude = 0.0,
+            ImpulseNoiseFreqHz = 4500.0,
+            ImpulseNoiseDecayMs = 2.0
         };
         return cfg;
     }
@@ -297,6 +314,13 @@ public sealed class WatchSynthStream
     private double _resonator2S1, _resonator2S2;
     private double _noiseLpState, _noiseHpLowState;
 
+    // ---- impulse-noise state (dedicated RNG stream; idle when rate is 0) ----
+    private ulong _impulseRngState;
+    private ulong _nextImpulseSampleIndex;
+    private int _impulseActive;
+    private ulong _impulseStartSampleIndex;
+    private double _impulsePolarity;
+
     // ---- static helpers ----
 
     /// <summary>Clamp helper used for all defensive range limits (ws_clamp).</summary>
@@ -382,6 +406,13 @@ public sealed class WatchSynthStream
         if (cfg.CPeakAnchorWidthS <= 0.0 || cfg.CPeakAnchorWidthS > 0.0010) { err = "c_peak_anchor_width_s must be >0 and <=1 ms"; return false; }
         if (cfg.MinAToCTimeS <= 0.0 || cfg.MaxAToCTimeS <= cfg.MinAToCTimeS) { err = "A-to-C clamp range is invalid"; return false; }
         if (cfg.StartTimeS < 0.0) { err = "start_time_s must be >=0"; return false; }
+        if (cfg.ImpulseNoiseRatePerSecond < 0.0 || cfg.ImpulseNoiseRatePerSecond > 50.0) { err = "impulse_noise_rate_per_second must be 0..50"; return false; }
+        if (cfg.ImpulseNoiseRatePerSecond > 0.0)
+        {
+            if (cfg.ImpulseNoisePeakAmplitude < 0.0 || cfg.ImpulseNoisePeakAmplitude > 1.0) { err = "impulse_noise_peak_amplitude must be 0..1 normalized PCM"; return false; }
+            if (cfg.ImpulseNoiseFreqHz < 100.0 || cfg.ImpulseNoiseFreqHz > 0.45 * cfg.SampleRateHz) { err = "impulse_noise_freq_hz must be 100..0.45*sample_rate"; return false; }
+            if (cfg.ImpulseNoiseDecayMs <= 0.0 || cfg.ImpulseNoiseDecayMs > 50.0) { err = "impulse_noise_decay_ms must be >0 and <=50 ms"; return false; }
+        }
         double adjusted = (3600.0 / cfg.Bph) / (1.0 + cfg.RateErrorSPerDay / 86400.0);
         double beatErrorOffsetS = Math.Abs(cfg.BeatErrorMs) * 1.0e-3;
         if (adjusted <= beatErrorOffsetS + cfg.TimingJitterUs * 1.0e-6 + cfg.BphWanderDepthUs * 1.0e-6)
@@ -434,6 +465,16 @@ public sealed class WatchSynthStream
         _resonator1S1 = _resonator1S2 = 0.0;
         _resonator2S1 = _resonator2S2 = 0.0;
         _noiseLpState = _noiseHpLowState = 0.0;
+
+        /* Impulse noise: dedicated RNG stream derived from the seed so the
+         * main tick/jitter/noise sequences never observe these draws. */
+        _impulseRngState = seed ^ 0xD1B54A32D192ED03UL;
+        _impulseActive = 0;
+        _impulseStartSampleIndex = 0;
+        _impulsePolarity = 0.0;
+        _nextImpulseSampleIndex = ulong.MaxValue;
+        if (_cfg.ImpulseNoiseRatePerSecond > 0.0)
+            _nextImpulseSampleIndex = WsNextImpulseDelaySamples();
     }
 
     // llround(): round half away from zero, then truncate to integer (C long long).
@@ -698,6 +739,43 @@ public sealed class WatchSynthStream
         return n;
     }
 
+    /* Exponential Poisson inter-arrival delay in samples (>= 1). */
+    private ulong WsNextImpulseDelaySamples()
+    {
+        double u = WsRand01(ref _impulseRngState);
+        double dtS = -Math.Log(1.0 - u) / _cfg.ImpulseNoiseRatePerSecond;
+        long samples = Llround(dtS * (double)_cfg.SampleRateHz);
+        if (samples < 1) samples = 1;
+        return (ulong)samples;
+    }
+
+    /*
+        Poisson-scheduled damped-sine impulse noise. A newly due impulse
+        restarts the (single) oscillator state; overlap at plausible rates is
+        rare and a restart is an acceptable, deterministic approximation.
+    */
+    private double WsImpulseNoise(ulong absSample)
+    {
+        WatchSynthStreamConfig cfg = _cfg;
+        while (absSample >= _nextImpulseSampleIndex)
+        {
+            _impulseActive = 1;
+            _impulseStartSampleIndex = _nextImpulseSampleIndex;
+            _impulsePolarity = WsRand01(ref _impulseRngState) < 0.5 ? -1.0 : 1.0;
+            _nextImpulseSampleIndex += WsNextImpulseDelaySamples();
+        }
+        if (_impulseActive == 0) return 0.0;
+        double tauS = cfg.ImpulseNoiseDecayMs * 1.0e-3;
+        double relS = (double)(absSample - _impulseStartSampleIndex) / (double)cfg.SampleRateHz;
+        if (relS > 8.0 * tauS)
+        {
+            _impulseActive = 0;
+            return 0.0;
+        }
+        double env = Math.Exp(-relS / tauS);
+        return _impulsePolarity * cfg.ImpulseNoisePeakAmplitude * env * Math.Sin(2.0 * MPi * cfg.ImpulseNoiseFreqHz * relS);
+    }
+
     /*
         Fill the caller-provided mono float PCM buffer (watch_synth_stream_fill_f32).
 
@@ -737,6 +815,8 @@ public sealed class WatchSynthStream
                 y = WsResonator(y, ref _resonator2S1, ref _resonator2S2, sr, _cfg.SensorResonance2Hz, _cfg.SensorResonance2Q, _cfg.SensorResonance2Gain);
             }
             y += WsNoise();
+            if (_cfg.ImpulseNoiseRatePerSecond > 0.0)
+                y += WsImpulseNoise(absSample);
             outPcm[i] = (float)WsClamp(y, -1.0, 1.0);
             ++_absoluteSampleIndex;
         }
