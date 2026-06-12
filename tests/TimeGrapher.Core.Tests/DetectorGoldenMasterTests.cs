@@ -27,7 +27,12 @@ public sealed class DetectorGoldenMasterTests
         float OnsetThreshold,
         float MinPeakThreshold,
         float NoiseFloor,
-        float ReferencePeak);
+        float ReferencePeak,
+        int FlushEventCount,
+        float FlushOnsetThreshold,
+        float FlushMinPeakThreshold,
+        float FlushNoiseFloor,
+        float FlushReferencePeak);
 
     private static GoldenRun Run(bool clean)
     {
@@ -62,15 +67,32 @@ public sealed class DetectorGoldenMasterTests
             remaining -= slice;
         }
 
-        return new GoldenRun(events, onsetThr, minPeakThr, noise, refPeak);
+        /* End-of-stream drain: pinned separately so an always-on drift
+         * confined to the flush tail also fails the golden master. */
+        detector.Flush(result);
+
+        return new GoldenRun(events, onsetThr, minPeakThr, noise, refPeak,
+            result.Events.Count, result.OnsetThreshold, result.MinPeakThreshold,
+            result.NoiseFloor, result.ReferencePeak);
     }
 
     private static void AssertGolden(
         GoldenRun run,
         int expectedTotalEvents,
         (TgEventType Type, ulong SampleIndex, double SubSampleOffset)[] expectedEvents,
-        float onsetThr, float minPeakThr, float noiseFloor, float refPeak)
+        float onsetThr, float minPeakThr, float noiseFloor, float refPeak,
+        float flushOnsetThr, float flushMinPeakThr, float flushNoiseFloor, float flushRefPeak)
     {
+        Assert.Equal(0, run.FlushEventCount);
+        Assert.True(Math.Abs(flushOnsetThr - run.FlushOnsetThreshold) <= Tolerance,
+            $"FlushOnsetThreshold {run.FlushOnsetThreshold} != {flushOnsetThr}");
+        Assert.True(Math.Abs(flushMinPeakThr - run.FlushMinPeakThreshold) <= Tolerance,
+            $"FlushMinPeakThreshold {run.FlushMinPeakThreshold} != {flushMinPeakThr}");
+        Assert.True(Math.Abs(flushNoiseFloor - run.FlushNoiseFloor) <= Tolerance,
+            $"FlushNoiseFloor {run.FlushNoiseFloor} != {flushNoiseFloor}");
+        Assert.True(Math.Abs(flushRefPeak - run.FlushReferencePeak) <= Tolerance,
+            $"FlushReferencePeak {run.FlushReferencePeak} != {flushRefPeak}");
+
         Assert.Equal(expectedTotalEvents, run.Events.Count);
         for (int i = 0; i < expectedEvents.Length; i++)
         {
@@ -144,7 +166,11 @@ public sealed class DetectorGoldenMasterTests
             onsetThr: 0.008158111f,
             minPeakThr: 0.0543874f,
             noiseFloor: 1E-09f,
-            refPeak: 0.271937f);
+            refPeak: 0.271937f,
+            flushOnsetThr: 0.008158111f,
+            flushMinPeakThr: 0.0543874f,
+            flushNoiseFloor: 1E-09f,
+            flushRefPeak: 0.271937f);
     }
 
     [Fact]
@@ -199,6 +225,10 @@ public sealed class DetectorGoldenMasterTests
             onsetThr: 0.011252444f,
             minPeakThr: 0.047976665f,
             noiseFloor: 0.0047716987f,
-            refPeak: 0.22079654f);
+            refPeak: 0.22079654f,
+            flushOnsetThr: 0.01112763f,
+            flushMinPeakThr: 0.047873728f,
+            flushNoiseFloor: 0.004643025f,
+            flushRefPeak: 0.22079654f);
     }
 }

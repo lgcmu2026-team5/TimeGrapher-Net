@@ -44,6 +44,11 @@ public sealed class DetectorOptionsFidelityTests
             AssertBlockIdentical(resultNull, resultAllOff);
             remaining -= slice;
         }
+
+        // End-of-stream drain must stay identical too.
+        detectorNull.Flush(resultNull);
+        detectorAllOff.Flush(resultAllOff);
+        AssertBlockIdentical(resultNull, resultAllOff);
     }
 
     [Fact]
@@ -76,21 +81,29 @@ public sealed class DetectorOptionsFidelityTests
             synthB.Generate(blockB.AsSpan(0, slice));
             DetectorMetricsBlockUpdate updateNull = engineNull.Process(blockA.AsSpan(0, slice));
             DetectorMetricsBlockUpdate updateAllOff = engineAllOff.Process(blockB.AsSpan(0, slice));
-
-            Assert.Equal(updateNull.Result.SyncStatus, updateAllOff.Result.SyncStatus);
-            Assert.Equal(updateNull.Result.DetectedBph, updateAllOff.Result.DetectedBph);
-            Assert.Equal(updateNull.Result.OnsetThreshold, updateAllOff.Result.OnsetThreshold);
-            Assert.Equal(updateNull.Result.NoiseFloor, updateAllOff.Result.NoiseFloor);
-            Assert.Equal(updateNull.Events.Count, updateAllOff.Events.Count);
-            for (int i = 0; i < updateNull.Events.Count; i++)
-            {
-                Assert.Equal(updateNull.Events[i].EventSample, updateAllOff.Events[i].EventSample);
-                Assert.Equal(updateNull.Events[i].Event.Type, updateAllOff.Events[i].Event.Type);
-                Assert.Equal(
-                    updateNull.Events[i].MetricsUpdate.ResultsText,
-                    updateAllOff.Events[i].MetricsUpdate.ResultsText);
-            }
+            AssertUpdateIdentical(updateNull, updateAllOff);
             remaining -= slice;
+        }
+
+        // End-of-stream drain (Flush routes through endOfStream) too.
+        AssertUpdateIdentical(engineNull.Flush(), engineAllOff.Flush());
+    }
+
+    private static void AssertUpdateIdentical(
+        DetectorMetricsBlockUpdate updateNull, DetectorMetricsBlockUpdate updateAllOff)
+    {
+        Assert.Equal(updateNull.Result.SyncStatus, updateAllOff.Result.SyncStatus);
+        Assert.Equal(updateNull.Result.DetectedBph, updateAllOff.Result.DetectedBph);
+        Assert.Equal(updateNull.Result.OnsetThreshold, updateAllOff.Result.OnsetThreshold);
+        Assert.Equal(updateNull.Result.NoiseFloor, updateAllOff.Result.NoiseFloor);
+        Assert.Equal(updateNull.Events.Count, updateAllOff.Events.Count);
+        for (int i = 0; i < updateNull.Events.Count; i++)
+        {
+            Assert.Equal(updateNull.Events[i].EventSample, updateAllOff.Events[i].EventSample);
+            Assert.Equal(updateNull.Events[i].Event.Type, updateAllOff.Events[i].Event.Type);
+            Assert.Equal(
+                updateNull.Events[i].MetricsUpdate.ResultsText,
+                updateAllOff.Events[i].MetricsUpdate.ResultsText);
         }
     }
 

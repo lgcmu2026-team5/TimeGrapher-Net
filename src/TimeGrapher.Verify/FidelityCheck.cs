@@ -104,7 +104,13 @@ internal static class FidelityCheck
             generated += slice;
         }
 
-        return true;
+        /* End-of-stream drain: Flush routes through the engine's
+         * endOfStream path, so the equality must hold there too. */
+        DetectorMetricsBlockUpdate flushNull = engineNull.Flush();
+        DetectorMetricsBlockUpdate flushAllOff = engineAllOff.Flush();
+        blocks++;
+        events += flushNull.Events.Count;
+        return BlocksIdentical(flushNull, flushAllOff);
     }
 
     private static bool ProcessAndCompare(
