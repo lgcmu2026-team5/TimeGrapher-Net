@@ -113,6 +113,9 @@ internal sealed class TgDetectorCore
     public ulong RegimeLastResetIdx;   // abs sample idx of last reset, 0 = never
     public int RegimeResetPending;     // set on trip, cleared by lib after flush
 
+    /* I-3 RegimeGuard runtime state: consecutive qualifying peaks. */
+    public int RegimeTripRun;
+
     /* ---- wall-clock gates ---- */
     public ulong SilenceSamples;       // samples since burst end (capped)
     public ulong MinSilenceSamples;    // threshold for new A onset
@@ -213,6 +216,7 @@ internal sealed class TgDetectorCore
         RegimePeakCount = 0;
         RegimePeakHead = 0;
         RegimeResetPending = 0;
+        RegimeTripRun = 0;
 
         /* V5.4: clear envelope ring buffer (don't free; kept across resets). */
         if (EnvRing != null && EnvRingCapacity > 0)
@@ -493,6 +497,23 @@ internal sealed class TgDetectorCore
              * large enough, OR if jumping from noise to signal. */
             bool ratioOk = aboveFloor && (peak >= TG_REGIME_RATIO * prevMin);
             int trip = (ratioOk || absFloorJump) ? 1 : 0;
+            /* I-3 RegimeGuard: require a run of qualifying peaks before
+             * tripping. A single accepted impulse (door slam, typing) is
+             * reset by the next ordinary tick, while a genuine gain change
+             * qualifies on every subsequent peak and trips within
+             * RegimeTripBeats beats. */
+            if (RegimeGuardEnabled)
+            {
+                if (trip != 0)
+                {
+                    RegimeTripRun++;
+                    trip = (RegimeTripRun >= RegimeTripBeats) ? 1 : 0;
+                }
+                else
+                {
+                    RegimeTripRun = 0;
+                }
+            }
             /* Apply cooldown. */
             if (trip != 0 && RegimeLastResetIdx > 0)
             {
@@ -504,6 +525,10 @@ internal sealed class TgDetectorCore
             {
                 RegimeResetPending = 1;
                 RegimeLastResetIdx = absIdx;
+                if (RegimeGuardEnabled)
+                {
+                    RegimeTripRun = 0;
+                }
             }
         }
         /* Always store the new peak into the ring. */
