@@ -537,17 +537,22 @@ internal sealed class TgDetectorCore
     {
         if (AdaptiveFloorEnabled)
         {
-            /* I-1: an accept after RefDecayAfterS without accepts means the
-             * decayed reference (not the stale median) admitted this burst -
-             * the loudness regime moved down. Restart the peak history from
-             * this beat; otherwise the stale loud median re-latches the
-             * threshold and only one beat per decay cycle gets through
-             * (observed as a ~2.5 s limit cycle that keeps BPH lock
-             * unreachable). Downward counterpart of the V5.6 upward
-             * regime reset. */
+            /* I-1: an accept after RefDecayAfterS without accepts, AND below
+             * the stale median, means the decayed reference (not the stale
+             * median) admitted this burst - the loudness regime moved down.
+             * Restart the peak history from this beat; otherwise the stale
+             * loud median re-latches the threshold and only one beat per
+             * decay cycle gets through (observed as a ~2.5 s limit cycle
+             * that keeps BPH lock unreachable). Downward counterpart of the
+             * V5.6 upward regime reset. The below-median guard keeps a loud
+             * impulse arriving after a detection gap from wiping the median
+             * that would otherwise absorb it (the wipe would latch the
+             * max-of-few reference at the impulse height and black out weak
+             * ticks for seconds). */
             ulong afterSamples = (ulong)(RefDecayAfterS * Fs);
             if (LastAcceptAbsIdx > 0 && PeakHistoryCount > 0
-                && absIdx > LastAcceptAbsIdx + afterSamples)
+                && absIdx > LastAcceptAbsIdx + afterSamples
+                && peak < MedianPeakCache)
             {
                 for (int i = 0; i < TG_PEAK_HISTORY_N; ++i) PeakHistory[i] = 0.0;
                 PeakHistoryCount = 0;

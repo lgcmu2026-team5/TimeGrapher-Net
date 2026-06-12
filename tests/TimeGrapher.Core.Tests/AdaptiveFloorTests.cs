@@ -129,6 +129,31 @@ public sealed class AdaptiveFloorTests
     }
 
     [Fact]
+    public void LoudImpulseAfterDetectionGap_DoesNotWipeTheMedianHistory()
+    {
+        // A single 0.12 impulse lands after a 3 s detection gap. The history
+        // restart must NOT fire for it (the impulse is above the stale
+        // median, so this is not a downward regime move): the 16-entry
+        // median absorbs the outlier and the 0.01 ticks that resume right
+        // after stay accepted. Without the below-median guard the restart
+        // latched the max-of-few reference at the impulse height and
+        // blacked out the resumed ticks for seconds.
+        var bursts = new List<(int, float)>();
+        bursts.AddRange(BurstTrain(1.0, 12, 0.01f));   // healthy train to 3.75 s
+        bursts.Add(((int)(6.8 * Fs), 0.12f));          // impulse after a ~3 s gap
+        bursts.AddRange(BurstTrain(7.1, 8, 0.01f));    // ticks resume
+        float[] envelope = BuildEnvelope((int)(9.5 * Fs), bursts);
+
+        List<TgRawEvent> adaptive = Run(NewCore(adaptive: true), envelope);
+
+        ulong resumeStart = (ulong)(7.1 * Fs);
+        int resumedAccepts = adaptive.Count(ev => ev.SampleIndex >= resumeStart);
+        // 8 resumed bursts emit A+C each when accepted; require most of them.
+        Assert.True(resumedAccepts >= 12,
+            $"only {resumedAccepts} events after the impulse; the median history was wiped");
+    }
+
+    [Fact]
     public void NearNoiseBumps_DoNotFeedTheShadowRing_NoAdaptation()
     {
         // 0.0015 bursts are below RejectedPeakMinSnr * effNoise (~0.00168):
