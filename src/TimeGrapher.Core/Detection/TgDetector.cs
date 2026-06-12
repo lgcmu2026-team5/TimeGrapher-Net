@@ -64,6 +64,17 @@ public sealed class TgDetector
 
     // tg_init
     public TgDetector(TgConfig cfg)
+        : this(cfg, null)
+    {
+    }
+
+    /// <summary>
+    /// Overload carrying the opt-in robustness options. Kept off TgConfig so
+    /// the frozen TgTypes.cs contract stays untouched; a null options
+    /// reference (or an all-off instance) leaves the pipeline bit-identical
+    /// to the original port.
+    /// </summary>
+    public TgDetector(TgConfig cfg, TgDetectorOptions? options)
     {
         // tg_init: if (!cfg_in || cfg_in->sample_rate <= 0.0) return NULL;
         if (cfg == null || cfg.SampleRate <= 0.0)
@@ -112,6 +123,23 @@ public sealed class TgDetector
             _det.SetOnsetFraction(_cfg.OnsetFractionInit);
         if (_cfg.MinPeakFractionInit > 0.0)
             _det.SetMinPeakFraction(_cfg.MinPeakFractionInit);
+
+        /* Opt-in robustness options (config fields on the core; Init applied
+         * the all-off defaults above, so a null options stays bit-identical). */
+        if (options != null)
+        {
+            _det.AdaptiveFloorEnabled = options.EnableAdaptiveFloor;
+            _det.RejectedPeakMinSnr = options.RejectedPeakMinSnr;
+            _det.RejectedPeakMinCount = options.RejectedPeakMinCount;
+            _det.AdaptiveFloorMinMul = options.AdaptiveFloorMinMul;
+            _det.RefDecayAfterS = options.RefDecayAfterS;
+            _det.RefDecayTauS = options.RefDecayTauS;
+            _det.NoiseCensorEnabled = options.EnableNoiseCensor;
+            _det.NoiseCensorK = options.NoiseCensorK;
+            _det.NoiseCensorMaxRun = options.NoiseCensorMaxRun;
+            _det.RegimeGuardEnabled = options.EnableRegimeGuard;
+            _det.RegimeTripBeats = options.RegimeTripBeats;
+        }
 
         _sync = new TgSync();
         _sync.Init();

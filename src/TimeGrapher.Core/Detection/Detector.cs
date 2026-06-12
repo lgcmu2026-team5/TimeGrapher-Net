@@ -61,6 +61,20 @@ internal sealed class TgDetectorCore
     public ulong MinAIntervalSamples;
     public ulong SamplesSinceLastA;   // wall-clock counter
 
+    /* ---- opt-in robustness options (config, preserved across Reset; all
+     * defaults set in Init keep the V5.x behavior bit-identical) ---- */
+    public bool AdaptiveFloorEnabled;
+    public double RejectedPeakMinSnr;
+    public int RejectedPeakMinCount;
+    public double AdaptiveFloorMinMul;
+    public double RefDecayAfterS;
+    public double RefDecayTauS;
+    public bool NoiseCensorEnabled;
+    public double NoiseCensorK;
+    public int NoiseCensorMaxRun;
+    public bool RegimeGuardEnabled;
+    public int RegimeTripBeats;
+
     /* ---- noise floor: 75th percentile of downsampled silence samples ---- */
     public readonly double[] NoiseHistory = new double[TG_NOISE_HISTORY_N];
     public int NoiseHistoryCount;
@@ -219,6 +233,20 @@ internal sealed class TgDetectorCore
 
         /* V4.5: A-to-A interval gate disabled at init / pre-sync. */
         MinAIntervalSamples = 0;
+
+        /* Robustness options all off by default (V5.x bit-identical). The
+         * TgDetector ctor overload overrides these from TgDetectorOptions. */
+        AdaptiveFloorEnabled = false;
+        RejectedPeakMinSnr = 2.0;
+        RejectedPeakMinCount = 8;
+        AdaptiveFloorMinMul = 3.0;
+        RefDecayAfterS = 2.0;
+        RefDecayTauS = 5.0;
+        NoiseCensorEnabled = false;
+        NoiseCensorK = 3.5;
+        NoiseCensorMaxRun = 128;
+        RegimeGuardEnabled = false;
+        RegimeTripBeats = 3;
 
         /* V5.2: C-search skip default 3 ms. */
         CSearchSkipSamples = (ulong)(0.003 * fs);
