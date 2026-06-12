@@ -213,7 +213,6 @@ public sealed class SoundImageRenderer
     private int _writeColumn;
 
     // Most recent completed screen column.
-    private int _lastCompletedColumn = -1;
 
     // Metadata for each visible screen column.
     private RenderedColumn[] _renderedColumns = Array.Empty<RenderedColumn>();
@@ -360,7 +359,6 @@ public sealed class SoundImageRenderer
         _anchorUsed = 0;
 
         _writeColumn = 0;
-        _lastCompletedColumn = -1;
 
         Array.Clear(_currentColumn);
         Array.Clear(_anchorSum);
@@ -398,7 +396,6 @@ public sealed class SoundImageRenderer
         _anchorUsed = 0;
 
         _writeColumn = 0;
-        _lastCompletedColumn = -1;
 
         Array.Clear(_currentColumn);
         Array.Clear(_anchorSum);
@@ -869,7 +866,6 @@ public sealed class SoundImageRenderer
 
             RenderBinsToColumn(_writeColumn, _anchorColumnsBuffer, binsBase, meta);
 
-            _lastCompletedColumn = _writeColumn;
             _writeColumn = (_writeColumn + 1) % _width;
 
             ClearRenderedColumnStorage(_writeColumn);
@@ -984,7 +980,6 @@ public sealed class SoundImageRenderer
 
         RenderBinsToColumn(_writeColumn, _currentColumn, 0, meta);
 
-        _lastCompletedColumn = _writeColumn;
         _writeColumn = (_writeColumn + 1) % _width;
 
         ClearRenderedColumnStorage(_writeColumn);
