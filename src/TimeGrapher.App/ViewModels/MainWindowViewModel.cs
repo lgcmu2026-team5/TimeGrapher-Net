@@ -47,6 +47,7 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _highPassCutoffText = "200";
     private decimal _scopeScale = 2m;
     private bool _useCOnset;
+    private bool _robustDetection;
     private int _sweepMultiple = 2;
     private int _selectedPositionIndex; // 0 = WatchPosition.CH (dial up)
     private bool _sigmaAveraging;
@@ -238,6 +239,16 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _useCOnset;
         set => SetProperty(ref _useCOnset, value);
+    }
+
+    /// <summary>
+    /// Robust-detection preset (adaptive floor + regime guard + PLL event
+    /// veto) for weak-signal / noisy environments. Off = original pipeline.
+    /// </summary>
+    public bool RobustDetection
+    {
+        get => _robustDetection;
+        set => SetProperty(ref _robustDetection, value);
     }
 
     /// <summary>Scope Sweep window length as a multiple of the beat period (1x / 2x / 4x).</summary>

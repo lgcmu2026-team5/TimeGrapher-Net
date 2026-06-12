@@ -333,7 +333,7 @@
               <TextBlock Name="MiscLabel"
                          Classes="SectionHeader"
                          Text="Misc. Parameters" />
-              <Grid ColumnDefinitions="132,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+              <Grid ColumnDefinitions="132,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
                 <TextBlock Name="HighPassLabel" Grid.Row="0" Grid.Column="0"
                            VerticalAlignment="Center" HorizontalAlignment="Center" FontWeight="Bold" Text="High Pass Cutoff" />
                 <TextBox Name="HighLineEdit" Grid.Row="0" Grid.Column="1"
@@ -351,6 +351,12 @@
                           IsEnabled="{Binding AreRunParametersEnabled}"
                           FontWeight="Bold" Content="C Event Use Onset Amplitude"
                           IsChecked="{Binding UseCOnset, Mode=TwoWay}" />
+
+                <CheckBox Name="RobustDetectionCheckBox" Grid.Row="3" Grid.ColumnSpan="2"
+                          HorizontalAlignment="Right"
+                          IsEnabled="{Binding AreRunParametersEnabled}"
+                          FontWeight="Bold" Content="Robust Detection (weak/noisy)"
+                          IsChecked="{Binding RobustDetection, Mode=TwoWay}" />
               </Grid>
             </StackPanel>
           </Border>

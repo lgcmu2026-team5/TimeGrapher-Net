@@ -1,6 +1,8 @@
 using TimeGrapher.App.Rendering;
 using TimeGrapher.Core.Analysis;
 using TimeGrapher.Core.AudioIo;
+using TimeGrapher.Core.Detection;
+using TimeGrapher.Core.Detection.Scoring;
 
 namespace TimeGrapher.App;
 
@@ -14,7 +16,8 @@ internal sealed record AnalysisRunSettings(
     double HpfCutoffHz,
     int SoundImageWidth,
     int SoundImageHeight,
-    int ScopeSnapshotPointBudget)
+    int ScopeSnapshotPointBudget,
+    bool RobustDetection)
 {
     public AnalysisWorker.Config ToWorkerConfig(ulong sessionId, ISampleWriter? sampleWriter)
     {
@@ -28,6 +31,10 @@ internal sealed record AnalysisRunSettings(
             AutoBph = AutoBph,
             ManualBph = ManualBph,
             HpfCutoffHz = HpfCutoffHz,
+            // Robust preset: the same composition the verifier's robust
+            // profile froze by A/B measurement (floor + guard + PLL veto).
+            DetectorOptions = RobustDetection ? TgDetectorOptions.Robust() : null,
+            EventGate = RobustDetection ? new PllMatchGate() : null,
             SoundImageWidth = SoundImageWidth,
             SoundImageHeight = SoundImageHeight,
             ScopeSnapshotPointBudget = ScopeSnapshotPointBudget,
