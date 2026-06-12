@@ -87,10 +87,10 @@ work requests** — 점진적 저하). 패스마다 백로그를 **비트 주기
 | Tactic | 적용 방식 | 근거 | |
 |---|---|---|---|
 | **restrict dependencies** | Core는 외부 참조 0개. App→Platform→Core 단방향 비순환. **CI가 grep으로 Core 안의 NAudio/Platform 참조를 차단**하고, OS별 publish에 잘못된 DLL이 섞이면 빌드 실패 | `Core.csproj`, `.github/workflows/ci.yml` | ✓ |
-| **encapsulate** | OS 오디오 스택(NAudio / pw-record)을 Core 소유 인터페이스 `ILiveAudioWorker : IAudioInputWorker` 뒤에 은닉 | `IAudioInputWorker.cs` | ✓ |
+| **encapsulate** | OS 오디오 스택(NAudio / pw-record)을 Core 소유 인터페이스 `ILiveAudioWorker : IAudioInputWorker` 뒤에 은닉 | `ILiveAudioWorker.cs`, `IAudioInputWorker.cs` | ✓ |
 | **use an intermediary** | `LiveAudioBackend` 한 파일만 구체 OS 타입을 알고 분기. 나머지 App은 인터페이스만 사용 | `LiveAudioBackend.cs` | ✓ |
 | **increase semantic coherence** | Core = 분석(Detection/Metrics/Imaging/Sim)만 담당. UI·OS 책임 없음 | `Core.csproj` | ✓ |
-| **split module** | 비대해지던 `MainWindow`를 partial 5개 + 추출 서비스(`RunCommandService`, `RunSessionController`, `SelectionCoordinator`)로 분해 | `MainWindow.*.cs` | ✓ |
+| **split module** | 비대해지던 `MainWindow`를 partial 5개 + 추출 서비스(`RunCommandService`, `RunSessionController`, `MainWindowSelectionCoordinator`)로 분해 | `MainWindow.*.cs` | ✓ |
 
 ### 성능 (Performance) — 실시간 UI의 핵심
 
