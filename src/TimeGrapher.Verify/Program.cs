@@ -7,6 +7,13 @@
 // A directory argument is expanded to its *.wav files.
 //   TimeGrapher.Verify --generated --byte-fixtures
 // Adds deterministic generated and byte-built WAV fixtures for CI.
+//   TimeGrapher.Verify --adverse [--profile=baseline|robust] [--opts=floor|guard|gate[+..]] [--gate=off|pll]
+//   TimeGrapher.Verify --ab=armA,armB
+//   TimeGrapher.Verify --fidelity-check
+// Adverse-condition rows, arm-based A/B, and the all-off fidelity gate.
+//
+// Exit codes: 0 = all gates passed, 1 = a verification gate failed,
+// 2 = usage error (unknown option, malformed spec, flags without a runner).
 
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -82,6 +89,15 @@ foreach (string arg in args)
         continue;
     }
 
+    if (arg.StartsWith("--", StringComparison.Ordinal))
+    {
+        // An unrecognized option must not fall through to the WAV-path
+        // branch (a typo'd flag used to crash WavFileReader with an
+        // unhandled exception instead of a usage error).
+        Console.Error.WriteLine($"TimeGrapher.Verify: unknown option '{arg}'");
+        return 2;
+    }
+
     if (Directory.Exists(arg))
     {
         files.AddRange(Directory.GetFiles(arg, "*.wav").OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
@@ -91,12 +107,21 @@ foreach (string arg in args)
         files.Add(arg);
     }
 }
+
+// Arm-selection flags configure only the adverse runner; supplying them
+// without --adverse/--ab silently ran zero adverse gates (false green).
+if (!runAdverse && (profileSpec != "baseline" || optsSpec != null || gateSpec != null))
+{
+    Console.Error.WriteLine("TimeGrapher.Verify: --profile/--opts/--gate require --adverse or --ab");
+    return 2;
+}
 files.AddRange(generatedFiles);
 
 if (files.Count == 0 && !runAdverse && !runFidelityCheck)
 {
+    // Usage error (exit 2): exit 1 is reserved for verification failures.
     Console.Error.WriteLine("TimeGrapher.Verify: no WAV files specified");
-    return 1;
+    return 2;
 }
 
 bool allMatch = true;
@@ -277,7 +302,17 @@ if (runAdverse)
         ArmSpec? arm = ArmSpec.Parse(spec);
         if (arm != null && gateSpec != null)
         {
-            arm = arm with { Name = $"{arm.Name}:gate={gateSpec}", UsePllGate = gateSpec == "pll" };
+            bool overrideUsesPll = gateSpec == "pll";
+            if (overrideUsesPll == arm.UsePllGate)
+            {
+                // Identity override: keep the canonical arm name so the
+                // calibrated gates stay active (renaming would silently
+                // downgrade every row to INFO).
+                return arm;
+            }
+            arm = arm with { Name = $"{arm.Name}:gate={gateSpec}", UsePllGate = overrideUsesPll };
+            Console.Error.WriteLine(
+                $"note: --gate creates the attribution arm '{arm.Name}'; calibrated gates run INFO-only");
         }
         return arm;
     }
