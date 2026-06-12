@@ -11,7 +11,6 @@ public readonly record struct MasterAudioBufferSnapshot(
 
 public readonly record struct MasterAudioBufferReadResult(
     int SamplesCopied,
-    ulong SourceSampleEnd,
     ulong OriginalPendingSamples,
     bool InputOverrun,
     ulong InputSamplesDropped,
@@ -206,7 +205,6 @@ public sealed class MasterAudioBuffer
 
             return new MasterAudioBufferReadResult(
                 copyCount,
-                sourceSampleEnd,
                 originalPendingSamples,
                 inputOverrun,
                 inputSamplesDropped,
