@@ -154,7 +154,13 @@ public sealed class TgDetector
             _det.RefDecayAfterS = options.RefDecayAfterS;
             _det.RefDecayTauS = options.RefDecayTauS;
             _det.RegimeGuardEnabled = options.EnableRegimeGuard;
-            _det.RegimeTripBeats = options.RegimeTripBeats;
+            /* The trip run is structurally capped by the regime ring depth:
+             * after TG_REGIME_RING_N consecutive loud peaks the ring min
+             * rises to the loud level and the run resets, so values above
+             * the ring size could never trip (silently disabling the V5.6
+             * reset). Clamp instead of trusting the knob. */
+            _det.RegimeTripBeats = Math.Clamp(
+                options.RegimeTripBeats, 1, TgDetectorCore.TG_REGIME_RING_N);
         }
 
         _sync = new TgSync();

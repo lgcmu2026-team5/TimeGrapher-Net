@@ -1,4 +1,5 @@
 using TimeGrapher.Core.Detection;
+using TimeGrapher.Core.Sim;
 using Xunit;
 
 namespace TimeGrapher.Core.Tests;
@@ -99,6 +100,70 @@ public sealed class RegimeGuardTests
         float[] envelope = BuildEnvelope((int)(5.0 * Fs), bursts);
 
         Assert.Equal(1, Run(NewCore(guard: true), envelope));
+    }
+
+    [Fact]
+    public void TripRunIsStructurallyCappedByTheRegimeRingDepth()
+    {
+        // A sustained gain step floods the 8-entry regime ring: after 8 loud
+        // peaks the ring min rises to the loud level and peaks stop
+        // qualifying, so the run can never exceed 8. TripBeats = 8 still
+        // trips; TripBeats = 9 would never trip - which is why the
+        // TgDetector ctor clamps the option to [1, TG_REGIME_RING_N].
+        var bursts = new List<(int, float)>();
+        bursts.AddRange(Train(1.0, 8, TickAmp));
+        bursts.AddRange(Train(3.0, 12, 0.12f));
+        float[] envelope = BuildEnvelope((int)(7.0 * Fs), bursts);
+
+        TgDetectorCore atCap = NewCore(guard: true);
+        atCap.RegimeTripBeats = 8;
+        Assert.Equal(1, Run(atCap, envelope));
+
+        TgDetectorCore overCap = NewCore(guard: true);
+        overCap.RegimeTripBeats = 9;
+        Assert.Equal(0, Run(overCap, envelope));
+    }
+
+    [Fact]
+    public void TgDetectorClampsOversizedTripBeats()
+    {
+        // Through the public seam an oversized knob is clamped, so a genuine
+        // sustained gain change still flushes (DetectorResetEvent) instead of
+        // the V5.6 reset being silently disabled.
+        WatchSynthStreamConfig cfg = WatchSynthStreamConfig.Clean();
+        cfg.SampleRateHz = 48000;
+        cfg.Bph = 21600;
+        cfg.PcmPeakAmplitude = 0.04;
+        cfg.NoisePeakAmplitude = 0.0;
+
+        var synth = new WatchSynthStream(cfg);
+        var detector = new TgDetector(TgConfig.Default(),
+            new TgDetectorOptions { EnableRegimeGuard = true, RegimeTripBeats = 99 });
+        var result = new TgResult();
+
+        bool sawReset = false;
+        var block = new float[4096];
+        long total = 48000L * 10;
+        long done = 0;
+        long stepAt = 48000L * 5;
+        while (done < total)
+        {
+            int slice = (int)Math.Min(block.Length, total - done);
+            Span<float> span = block.AsSpan(0, slice);
+            synth.Generate(span);
+            for (int i = 0; i < slice; i++)
+            {
+                if (done + i >= stepAt)
+                {
+                    span[i] *= 14f; // sustained gain-up step
+                }
+            }
+            detector.Process(span, result);
+            sawReset |= result.DetectorResetEvent;
+            done += slice;
+        }
+
+        Assert.True(sawReset, "clamped guard never tripped on a sustained gain step");
     }
 
     [Fact]

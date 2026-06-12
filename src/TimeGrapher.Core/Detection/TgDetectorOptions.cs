@@ -33,7 +33,12 @@ public sealed record TgDetectorOptions
     /* I-3 RegimeGuard: the instantaneous regime trip becomes a run-of-N
      * persistence counter so a single impulse cannot flush the detector. */
     public bool EnableRegimeGuard { get; init; }
-    /// <summary>Consecutive qualifying peaks required to trip a regime reset.</summary>
+    /// <summary>
+    /// Consecutive qualifying peaks required to trip a regime reset. Valid
+    /// range [1, 8]: the run counter cannot exceed the 8-entry regime ring
+    /// (a sustained gain step floods the ring and stops qualifying after 8
+    /// beats), so the applying constructor clamps to that range.
+    /// </summary>
     public int RegimeTripBeats { get; init; } = 3;
 
     /* I-4 support: record the PLL phase-match verdict per emitted event so an
