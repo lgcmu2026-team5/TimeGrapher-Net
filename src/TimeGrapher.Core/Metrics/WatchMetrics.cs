@@ -537,13 +537,18 @@ public sealed class WatchMetrics
                " | BEAT ERROR " + beatErrorText + " ms | BEAT " + beatsPerHour + " bph";
     }
 
+    // MainWindow::WrapInToRange: fmod into the range, adding the range size
+    // when the remainder is negative (C# '%' on doubles == C fmod).
     private double WrapIntoRange(double number, double lowerBound, double upperBound)
     {
         double rangeWidth = upperBound - lowerBound;
-        number = number - lowerBound;
-        // Qt's qFloor(qreal) returns int (int(std::floor(v))); preserve that truncation.
-        number = number - (int)Math.Floor(number / rangeWidth) * rangeWidth;
-        return number + lowerBound;
+        double wrapped = (number - lowerBound) % rangeWidth;
+        if (wrapped < 0)
+        {
+            wrapped += rangeWidth;
+        }
+
+        return wrapped + lowerBound;
     }
 
     private void AddOrOverwrite(List<double> xvec, List<double> yvec, double value, int maxSize, ref int index)
