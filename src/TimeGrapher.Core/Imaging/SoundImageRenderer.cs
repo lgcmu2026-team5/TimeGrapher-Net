@@ -212,8 +212,6 @@ public sealed class SoundImageRenderer
     // Next screen column to write. Wraps modulo _width.
     private int _writeColumn;
 
-    // Most recent completed screen column.
-
     // Metadata for each visible screen column.
     private RenderedColumn[] _renderedColumns = Array.Empty<RenderedColumn>();
 

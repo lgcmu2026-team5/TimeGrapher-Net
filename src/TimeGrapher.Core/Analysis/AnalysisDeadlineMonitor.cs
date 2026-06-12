@@ -6,9 +6,9 @@ namespace TimeGrapher.Core.Analysis;
 ///
 /// Budget rationale: one beat at 28800 BPH is 125 ms (3600 s / 28800). If per-beat
 /// work (capture -> DSP/detection -> metrics -> projection) costs more than one
-/// beat period, backlog grows; <see cref="AnalysisFrame.AnalysisLagSamples"/> is the
+/// beat period, backlog grows; <see cref="Shared.AnalysisFrame.AnalysisLagSamples"/> is the
 /// integral symptom of that, so it is the breach signal — measured in beat periods
-/// derived from the PLL-tracked period (125 ms default until BPH lock).
+/// derived from the nominal locked period (125 ms default until BPH lock).
 /// ProcessingElapsedMs stays telemetry-only: a single pass is bounded by the 4096-
 /// sample chunk and says nothing about the budget unless normalized; lag already is.
 ///
