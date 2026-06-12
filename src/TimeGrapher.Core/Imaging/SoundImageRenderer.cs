@@ -150,9 +150,6 @@ public sealed class SoundImageRenderer
     // Rounded integer sample rate for coefficient calculations.
     private ulong _sampleRateInt = 48000;
 
-    // Rounded integer BPH; valid only when _bphValid is true.
-    private ulong _bphInt;
-
     // True once _cfg.Bph is valid and rendering may occur.
     private bool _bphValid;
 
@@ -307,12 +304,6 @@ public sealed class SoundImageRenderer
 
         if (_cfg.Bph > 0.0)
         {
-            _bphInt = (ulong)Llround(_cfg.Bph);
-            if (_bphInt == 0)
-            {
-                _bphInt = 1;
-            }
-
             _bphValid = true;
             _samplesPerColumnExact = (_cfg.SampleRateHz * 3600.0) / _cfg.Bph;
             if (_samplesPerColumnExact < 1.0)
@@ -322,7 +313,6 @@ public sealed class SoundImageRenderer
         }
         else
         {
-            _bphInt = 0;
             _bphValid = false;
             _samplesPerColumnExact = 0.0;
         }

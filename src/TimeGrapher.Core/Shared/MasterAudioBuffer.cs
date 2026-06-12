@@ -16,8 +16,7 @@ public readonly record struct MasterAudioBufferReadResult(
     ulong InputSamplesDropped,
     double Fps,
     double Spf,
-    double Sps,
-    int NumberOfAudioSamples);
+    double Sps);
 
 /// <summary>
 /// Port of TMasterAudioDataRaw (SharedAudio.h): a 30-second mono float ring buffer
@@ -210,8 +209,7 @@ public sealed class MasterAudioBuffer
                 inputSamplesDropped,
                 _fps,
                 _spf,
-                _sps,
-                _numberOfAudioSamples);
+                _sps);
         }
     }
 
