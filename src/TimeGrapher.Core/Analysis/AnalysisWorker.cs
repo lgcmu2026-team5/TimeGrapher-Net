@@ -424,6 +424,10 @@ public sealed class AnalysisWorker : IDisposable
 
     private void DrainAndFlushInput()
     {
+        // Mirror the steady-state pass order: a recolor requested just before
+        // completion must reach the force-published final frame. Both drain
+        // entry points run on the thread that owns the pixel buffers.
+        ApplyPendingRecolor();
         HandleInputDataCore(stopInterruptible: false);
 
         var processingTimer = Stopwatch.StartNew();
