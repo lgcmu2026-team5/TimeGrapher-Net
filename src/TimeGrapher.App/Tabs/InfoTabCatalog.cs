@@ -138,7 +138,6 @@ internal static class InfoTabCatalog
     public static IReadOnlyList<InfoTabDefinition> All => Definitions;
 
     public static InfoTabDefinition RateScope => Definitions[0];
-    public static InfoTabDefinition SoundPrint => Definitions[1];
 
     public static InfoTabDefinition Get(string id)
     {
