@@ -38,16 +38,18 @@ flowchart TB
 
                 subgraph Core["TimeGrapher.Core<br/>analysis engine"]
                     direction TB
-                    CoreAnalysis["Analysis<br/>worker, deadline monitor,<br/>FFT, frame projectors"]
-                    CoreDetection["Detection<br/>tick/tock, BPH,<br/>sync, filters"]
+                    CoreAnalysis["Analysis<br/>worker, deadline monitor,<br/>FFT, frame projectors,<br/>beat-event gate host"]
+                    CoreDetection["Detection<br/>tick/tock, BPH,<br/>sync, filters,<br/>robustness options"]
+                    CoreScoring["Detection.Scoring<br/>IBeatEventGate (ML socket),<br/>PLL match gate, window features"]
                     CoreMetrics["Metrics<br/>watch metrics,<br/>rolling/decimating statistics"]
                     CoreImaging["Imaging<br/>sound image renderer"]
                     CoreAudioIo["AudioIo<br/>WAV read/write,<br/>playback worker"]
-                    CoreSim["Sim<br/>synthetic watch signal"]
+                    CoreSim["Sim<br/>synthetic watch signal,<br/>detection scorer"]
                     CoreShared["Shared<br/>contracts, buffers,<br/>frame DTOs"]
 
                     CoreAnalysis ~~~ CoreDetection
-                    CoreDetection ~~~ CoreMetrics
+                    CoreDetection ~~~ CoreScoring
+                    CoreScoring ~~~ CoreMetrics
                     CoreMetrics ~~~ CoreImaging
                     CoreImaging ~~~ CoreAudioIo
                     CoreAudioIo ~~~ CoreSim
@@ -115,7 +117,7 @@ flowchart TB
 | Module | Submodules / parts | Role |
 |---|---|---|
 | `TimeGrapher.App` | startup/settings files, `Views`, `ViewModels`, `Services`, `Tabs`, `Rendering`, `Audio`, `Assets` | Avalonia UI, run lifecycle coordination, tab frame routing/rendering, platform audio backend selection |
-| `TimeGrapher.Core` | `Analysis`, `Detection`, `Metrics`, `Imaging`, `AudioIo`, `Sim`, `Shared` | UI/OS-independent watch sound analysis engine and shared contracts |
+| `TimeGrapher.Core` | `Analysis`, `Detection`, `Detection/Scoring`, `Metrics`, `Imaging`, `AudioIo`, `Sim`, `Shared` | UI/OS-independent watch sound analysis engine and shared contracts. `Detection/Scoring` declares the veto-only `IBeatEventGate` socket (classical `PllMatchGate` now, ONNX TinyML gate later via a leaf inference project) plus the `BeatWindowFeatures` feature contract; `Detection` adds the opt-in `TgDetectorOptions` robustness knobs (all-off = bit-identical port); `Analysis` hosts the gate at the metrics choke point; `Sim` adds the ground-truth `DetectionScorer` |
 | `TimeGrapher.Platform.WindowsAudio` | `AudioCaptureWorker`, `SystemAudioControl` | Windows live microphone capture and system-volume integration behind Core live-audio contracts |
 | `TimeGrapher.Platform.LinuxAudio` | `LinuxLiveAudioWorker` | Linux live microphone capture through PipeWire/ALSA command-line tools behind Core live-audio contracts |
 | `TimeGrapher.Verify` | console entry point | Headless generated/WAV verification tool that exercises the Core detection and metrics pipeline |

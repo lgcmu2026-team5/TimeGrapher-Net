@@ -61,6 +61,8 @@ flowchart TB
 
 `TimeGrapher.App`의 플랫폼 오디오 `ProjectReference`는 `RuntimeIdentifier` 조건부다. RID가 없을 때는 개발/테스트 빌드를 위해 Windows와 Linux 어댑터가 모두 포함되고, `win-*` 또는 `linux-*` RID publish에서는 해당 플랫폼 어댑터만 포함된다.
 
+검출 강건성 옵션(`TgDetectorOptions`)과 이벤트 게이트 소켓(`IBeatEventGate`/`BeatEventGateHost`)은 전부 Core 내부 요소라 **프로젝트 간 신규 엣지를 만들지 않는다**. 미래의 TinyML 게이트는 계획 노드 `TimeGrapher.Inference`(ONNX Runtime 참조 리프 프로젝트)로 들어올 예정이며, 그때의 엣지는 `App → Inference → Core`, `Verify → Inference`로 Platform.* 패턴을 미러링한다 — Core는 계속 무의존.
+
 ## App internal uses
 
 ```mermaid
