@@ -38,6 +38,7 @@
 | `TimeGrapher.Core` | 검출, 메트릭, 사운드 이미지, WAV 처리, 시뮬레이터, 분석 워커 |
 | `TimeGrapher.App` | Avalonia UI, 화면 전환, 입력 선택, 그래프 표시, 스플래시 |
 | `TimeGrapher.Platform.WindowsAudio` | Windows 라이브 오디오 입력과 장치 볼륨 제어 |
+| `TimeGrapher.Platform.LinuxAudio` | Raspberry Pi/Linux 라이브 오디오 입력 (PipeWire `pw-record` / ALSA `arecord`) |
 | `TimeGrapher.Verify` | 화면 없이 샘플 WAV를 분석하는 검증 콘솔 |
 | 테스트 프로젝트 | 계산 로직, 렌더링 계약, UI 데이터 전달 회귀 테스트 |
 

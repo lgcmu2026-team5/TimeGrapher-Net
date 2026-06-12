@@ -155,7 +155,6 @@ class WatchMetricsUpdate {
     +IReadOnlyList~double~ YToc
     +bool ResultsUpdated
     +string ResultsText
-    +bool CMarkerTextUpdated
     +string CMarkerText
     +bool BeatTimingSampleUpdated
     +BeatTimingSample BeatTimingSample
