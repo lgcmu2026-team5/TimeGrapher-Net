@@ -5,34 +5,32 @@
 ## Runtime Components and Connectors
 
 ```mermaid
-flowchart LR
+graph LR
     subgraph CoreRuntime["Core runtime pipeline"]
-        direction LR
-        AnalysisWorker["Analysis worker<br/>emits AnalysisFrame"]
-        WatchMetrics["WatchMetrics<br/>rate/amplitude updates"]
-        History["BeatMetricsHistory<br/>cumulative stats"]
-        Snapshot["BeatMetricsHistorySnapshot<br/>immutable snapshot"]
+        AnalysisWorker["Analysis worker"]
+        WatchMetrics["WatchMetrics"]
+        History["BeatMetricsHistory"]
+        Snapshot["BeatMetricsHistorySnapshot"]
 
-        AnalysisWorker -- "metrics update call" --> WatchMetrics
-        WatchMetrics -- "WatchMetricsUpdate" --> History
-        History -- "snapshot reference" --> Snapshot
+        AnalysisWorker --> WatchMetrics
+        WatchMetrics --> History
+        History --> Snapshot
     end
 
     subgraph AppRuntime["App UI runtime"]
-        direction LR
-        Router["Analysis tab router<br/>latest frame dispatch"]
+        Router["Analysis tab router"]
         Consumer["VarioFrameConsumer"]
         Renderer["VarioRenderer"]
-        Controls["Avalonia controls<br/>summary, table"]
-        Plots["ScottPlot AvaPlot<br/>rate and amplitude gauges"]
+        Controls["Avalonia controls"]
+        Plots["ScottPlot AvaPlot"]
 
-        Router -- "IAnalysisFrameConsumer.RenderFrame" --> Consumer
-        Consumer -- "RenderFrame(frame, context)" --> Renderer
-        Renderer -- "set TextBlock values" --> Controls
-        Renderer -- "update spans, lines, labels" --> Plots
+        Router --> Consumer
+        Consumer --> Renderer
+        Renderer --> Controls
+        Renderer --> Plots
     end
 
-    Snapshot -- "frame.MetricsHistory" --> Router
+    Snapshot --> Router
 ```
 
 ## Component Catalog
@@ -103,4 +101,3 @@ sequenceDiagram
 | Vario rendering must use `BeatMetricsHistorySnapshot` as the boundary object. | Maintains a single data contract shared by Trace, Long-Term, Positions, and Vario-style stability views. |
 | UI-side Vario components must not re-accumulate per-beat statistics. | Prevents frame scheduling from changing measurement results and preserves deterministic statistics. |
 | Threshold logic used in the criteria flyout and renderer must share the same constants. | Prevents documentation shown in the UI from drifting away from live verdict behavior. |
-

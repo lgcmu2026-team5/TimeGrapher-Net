@@ -13,17 +13,14 @@ Vario 기능의 책임은 다음 세 가지다.
 ## Decomposition Diagram
 
 ```mermaid
-flowchart TB
-    subgraph Vario["Vario feature"]
-        direction TB
-
+graph TB
+    subgraph VarioFeature["Vario feature"]
         subgraph Core["TimeGrapher.Core"]
-            direction TB
-            WatchMetrics["Metrics.WatchMetrics<br/>per-beat metric updates"]
-            BeatMetricsHistory["Metrics.BeatMetricsHistory<br/>history and Vario stats owner"]
-            RunningStats["Metrics.RunningStats<br/>online min/max/mean/sigma"]
-            Snapshot["Shared.BeatMetricsHistorySnapshot<br/>immutable published contract"]
-            StatsSummary["Shared.StatsSummary<br/>stat DTO"]
+            WatchMetrics["Metrics.WatchMetrics"]
+            BeatMetricsHistory["Metrics.BeatMetricsHistory"]
+            RunningStats["Metrics.RunningStats"]
+            Snapshot["Shared.BeatMetricsHistorySnapshot"]
+            StatsSummary["Shared.StatsSummary"]
 
             WatchMetrics --> BeatMetricsHistory
             BeatMetricsHistory --> RunningStats
@@ -33,23 +30,21 @@ flowchart TB
         end
 
         subgraph AppTabs["TimeGrapher.App.Tabs"]
-            direction TB
-            Catalog["InfoTabCatalog<br/>Vario tab definition"]
-            Registry["InfoTabRegistry<br/>Vario UI composition"]
-            Registration["InfoTabRegistration<br/>tab item and consumer"]
+            Catalog["InfoTabCatalog"]
+            Registry["InfoTabRegistry"]
+            Registration["InfoTabRegistration"]
 
             Catalog --> Registry
             Registry --> Registration
         end
 
         subgraph AppRendering["TimeGrapher.App.Rendering"]
-            direction TB
-            Consumer["VarioFrameConsumer<br/>frame consumer adapter"]
-            Renderer["VarioRenderer<br/>gauge/table renderer"]
-            GaugePolicy["VarioGaugePolicy<br/>acceptable bands and range"]
-            GaugeLayout["VarioGaugeLayout<br/>marker label layout"]
-            Readout["VarioReadout<br/>formatting and cursor lookup"]
-            Verdict["VarioVerdict<br/>rate/amplitude assessment"]
+            Consumer["VarioFrameConsumer"]
+            Renderer["VarioRenderer"]
+            GaugePolicy["VarioGaugePolicy"]
+            GaugeLayout["VarioGaugeLayout"]
+            Readout["VarioReadout"]
+            Verdict["VarioVerdict"]
 
             Consumer --> Renderer
             Renderer --> GaugePolicy
@@ -85,11 +80,11 @@ flowchart TB
 ## Uses Relations
 
 ```mermaid
-flowchart LR
-    AppTabs["App.Tabs<br/>InfoTabCatalog / InfoTabRegistry"]
-    AppRendering["App.Rendering<br/>Vario consumer and renderer"]
-    CoreShared["Core.Shared<br/>AnalysisFrame, BeatMetricsHistorySnapshot, StatsSummary"]
-    CoreMetrics["Core.Metrics<br/>BeatMetricsHistory, RunningStats"]
+graph LR
+    AppTabs["App.Tabs"]
+    AppRendering["App.Rendering"]
+    CoreShared["Core.Shared"]
+    CoreMetrics["Core.Metrics"]
     AvaloniaScottPlot["Avalonia / ScottPlot"]
 
     AppTabs --> AppRendering
@@ -112,4 +107,3 @@ Vario follows the project's existing separation of concerns:
 | Vario reads `BeatMetricsHistorySnapshot` rather than declaring graph-series input. | Shared contract and data ownership: cumulative history belongs to Core and is reused by other stability displays. |
 | Gauge policy, layout, readout, and verdict logic are separate pure rendering helpers. | Testability tactic: threshold and formatting behavior can be unit-tested without live Avalonia/ScottPlot controls. |
 | Vario statistics restart when the active watch position changes. | Correctness and domain separation: mixing positions would inflate spread and misrepresent current-position stability. |
-
