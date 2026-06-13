@@ -15,19 +15,18 @@ internal sealed record VarioSummaryControls(
 
 internal sealed record VarioBandBadgeControls(Control Rate, Control Amplitude);
 
-/// <summary>Numeric table cells (Min, Max, Spread, Average, Sigma, Current) per measure.</summary>
-internal sealed record VarioTableControls(
+internal sealed record VarioReadoutControls(
     IReadOnlyList<TextBlock> RateCells,
     IReadOnlyList<TextBlock> AmplitudeCells);
 
 /// <summary>
 /// Vario display: per-position stability of rate and amplitude. Each gauge shows
-/// the acceptable band (green), the measured min and max (blue lines), the
+/// the acceptable band (amber), the measured min and max (blue lines), the
 /// average (red solid line) and the current reading (black dashed line) — opaque lines so they
 /// stay legible over the band rather than blending a translucent fill into it;
 /// short role labels are placed by <see cref="VarioGaugeLayout"/> in fixed lanes
 /// so close values remain readable. A SUMMARY bar carries the verdicts and elapsed time;
-/// the table holds the exact numbers. Gauges are non-interactive (no Vario zoom
+/// the per-gauge readout strips hold the exact numbers. Gauges are non-interactive (no Vario zoom
 /// requirement; QAS-5 wants the readings legible without scroll/zoom), so their
 /// X-window stays locked to the derived range.
 /// </summary>
@@ -86,7 +85,7 @@ internal sealed class VarioRenderer
     public VarioRenderer(
         AvaPlot ratePlot, AvaPlot amplitudePlot,
         VarioSummaryControls summary, VarioBandBadgeControls bandBadges,
-        VarioTableControls table, string textFontFamily)
+        VarioReadoutControls readouts, string textFontFamily)
     {
         _summary = summary;
         _bandBadges = bandBadges;
@@ -95,7 +94,7 @@ internal sealed class VarioRenderer
         _rate = new Gauge
         {
             Plot = ratePlot,
-            Cells = table.RateCells,
+            Cells = readouts.RateCells,
             StatusText = summary.RateStatus,
             AcceptBandBadge = bandBadges.Rate,
             Assess = s => VarioVerdict.ForRate(s, VarioGaugePolicy.RateAcceptMinSPerDay, VarioGaugePolicy.RateAcceptMaxSPerDay),
@@ -108,7 +107,7 @@ internal sealed class VarioRenderer
         _amplitude = new Gauge
         {
             Plot = amplitudePlot,
-            Cells = table.AmplitudeCells,
+            Cells = readouts.AmplitudeCells,
             StatusText = summary.AmpStatus,
             AcceptBandBadge = bandBadges.Amplitude,
             Assess = s => VarioVerdict.ForAmplitude(s, VarioGaugePolicy.AmplitudeAcceptMinDeg, VarioGaugePolicy.AmplitudeAcceptMaxDeg),

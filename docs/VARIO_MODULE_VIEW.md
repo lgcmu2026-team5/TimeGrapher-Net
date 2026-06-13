@@ -69,9 +69,9 @@ graph TB
 | `TimeGrapher.Core.Shared.StatsSummary` | Carries the valid flag, min, max, mean, sigma, and sample count from Core to App. |
 | `TimeGrapher.Core.Shared.BeatMetricsHistorySnapshot` | Publishes immutable cumulative history and Vario `RateStats`, `AmplitudeStats`, `StatsElapsedS`, and current readings. |
 | `TimeGrapher.App.Tabs.InfoTabCatalog` | Declares the `Vario` tab id, name, refresh interval, and no graph-series contract because Vario reads the cumulative snapshot. |
-| `TimeGrapher.App.Tabs.InfoTabRegistry` | Builds the Vario tab controls, criteria flyout, summary, gauge plots, numeric table, and `VarioFrameConsumer`. |
+| `TimeGrapher.App.Tabs.InfoTabRegistry` | Builds the Vario tab controls, criteria flyout, summary, gauge plots, per-gauge readout strips, and `VarioFrameConsumer`. |
 | `TimeGrapher.App.Rendering.VarioFrameConsumer` | Connects the generic analysis tab frame protocol to `VarioRenderer`. It accumulates no UI-side state. |
-| `TimeGrapher.App.Rendering.VarioRenderer` | Renders rate/amplitude gauges, exact table values, elapsed time, and overall status from `BeatMetricsHistorySnapshot`. |
+| `TimeGrapher.App.Rendering.VarioRenderer` | Renders rate/amplitude gauges, exact readout-strip values, elapsed time, and overall status from `BeatMetricsHistorySnapshot`. |
 | `TimeGrapher.App.Rendering.VarioGaugePolicy` | Defines accepted rate and amplitude bands and derives the gauge X window. |
 | `TimeGrapher.App.Rendering.VarioGaugeLayout` | Places marker labels for min, max, average, and current values so close markers remain readable. |
 | `TimeGrapher.App.Rendering.VarioReadout` | Formats numeric values and elapsed time, and resolves review-cursor current values from history series. |

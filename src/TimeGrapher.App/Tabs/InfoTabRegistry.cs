@@ -483,9 +483,17 @@ internal sealed class InfoTabRegistry
         summaryCard.Bind(Border.BackgroundProperty, summaryCard.GetResourceObservable("PanelBgBrush"));
         summaryCard.Bind(Border.BorderBrushProperty, summaryCard.GetResourceObservable("ChromeBorderBrush"));
 
-        // --- Numeric table: exact numbers live here; gauges show position only ---
         string[] columnHeaders = { "Min", "Max", "Spread (Max−Min)", "Average", "Std dev (σ)", "Current" };
         uint[] columnColors = { 0xFF2D7DD2, 0xFF2D7DD2, 0x00000000, 0xFFC0392B, 0x00000000, 0x00000000 };
+        int[] stripOrder =
+        {
+            VarioRenderer.CellMin,
+            VarioRenderer.CellAverage,
+            VarioRenderer.CellMax,
+            VarioRenderer.CellSigma,
+            VarioRenderer.CellCurrent,
+            VarioRenderer.CellSpread,
+        };
 
         TextBlock[] BuildCells()
         {
@@ -497,8 +505,9 @@ internal sealed class InfoTabRegistry
                     Text = VarioReadout.Missing,
                     FontFamily = font,
                     FontSize = 13,
-                    Margin = new Thickness(0, 1, 16, 1),
-                    HorizontalAlignment = HorizontalAlignment.Right,
+                    FontWeight = FontWeight.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 1),
+                    HorizontalAlignment = HorizontalAlignment.Left,
                 };
                 if (columnColors[i] != 0u)
                 {
@@ -514,44 +523,46 @@ internal sealed class InfoTabRegistry
         TextBlock[] rateCells = BuildCells();
         TextBlock[] amplitudeCells = BuildCells();
 
-        var table = new Grid
+        Border BuildReadoutStrip(TextBlock[] cells)
         {
-            Margin = new Thickness(16, 2, 16, 2),
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
-        };
-        for (int c = 0; c < columnHeaders.Length; c++)
-        {
-            var header = new TextBlock
+            var strip = new Grid
             {
-                Text = columnHeaders[c],
-                FontSize = 11,
-                Opacity = 0.82,
-                FontWeight = FontWeight.SemiBold,
-                Margin = new Thickness(0, 1, 16, 1),
-                HorizontalAlignment = HorizontalAlignment.Right,
+                ColumnDefinitions = new ColumnDefinitions("*,*,*,*,*,*"),
+                RowDefinitions = new RowDefinitions("Auto,Auto"),
             };
-            Grid.SetRow(header, 0);
-            Grid.SetColumn(header, c + 1);
-            table.Children.Add(header);
-        }
-
-        void AddTableRow(string label, TextBlock[] cells, int row)
-        {
-            var rowLabel = new TextBlock { Text = label, FontSize = 13, Margin = new Thickness(0, 1, 16, 1) };
-            Grid.SetRow(rowLabel, row);
-            Grid.SetColumn(rowLabel, 0);
-            table.Children.Add(rowLabel);
-            for (int c = 0; c < cells.Length; c++)
+            for (int displayColumn = 0; displayColumn < stripOrder.Length; displayColumn++)
             {
-                Grid.SetRow(cells[c], row);
-                Grid.SetColumn(cells[c], c + 1);
-                table.Children.Add(cells[c]);
+                int cellIndex = stripOrder[displayColumn];
+                var header = new TextBlock
+                {
+                    Text = columnHeaders[cellIndex],
+                    FontSize = 11,
+                    Opacity = 0.82,
+                    FontWeight = FontWeight.SemiBold,
+                    Margin = new Thickness(0, 0, 10, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                };
+                cells[cellIndex].Margin = new Thickness(0, 0, 10, 0);
+                Grid.SetRow(header, 0);
+                Grid.SetColumn(header, displayColumn);
+                Grid.SetRow(cells[cellIndex], 1);
+                Grid.SetColumn(cells[cellIndex], displayColumn);
+                strip.Children.Add(header);
+                strip.Children.Add(cells[cellIndex]);
             }
+            var border = new Border
+            {
+                Child = strip,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(3),
+                Margin = new Thickness(16, 0, 16, 2),
+                Padding = new Thickness(8, 3, 8, 3),
+            };
+            border.Bind(Border.BackgroundProperty, border.GetResourceObservable("PanelBgBrush"));
+            border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("ChromeBorderBrush"));
+            return border;
         }
-
-        AddTableRow("Rate (s/d)", rateCells, 1);
-        AddTableRow("Amplitude (°)", amplitudeCells, 2);
 
         // --- Legend (colour words match the gauge markers) ---
         var legend = new TextBlock
@@ -579,17 +590,19 @@ internal sealed class InfoTabRegistry
 
         Grid rateHeader = GaugeHeader("RATE (s/d)", "Acceptable band -10 to +10 s/d", out Border rateBandBadge);
         Grid amplitudeHeader = GaugeHeader("AMPLITUDE (°)", "Acceptable band 270 to 300°", out Border amplitudeBandBadge);
+        Border rateReadout = BuildReadoutStrip(rateCells);
+        Border amplitudeReadout = BuildReadoutStrip(amplitudeCells);
 
         var grid = new Grid
         {
-            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,*,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*,Auto,Auto,*,Auto"),
         };
         Control[] rows =
         {
             summaryCard,
-            rateHeader, ratePlot,
-            amplitudeHeader, amplitudePlot,
-            table, legend,
+            rateHeader, rateReadout, ratePlot,
+            amplitudeHeader, amplitudeReadout, amplitudePlot,
+            legend,
         };
         for (int i = 0; i < rows.Length; i++)
         {
@@ -599,7 +612,7 @@ internal sealed class InfoTabRegistry
 
         if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
         {
-            Grid.SetRow(overlay, 2);
+            Grid.SetRow(overlay, 3);
             grid.Children.Add(overlay);
         }
 
@@ -607,7 +620,7 @@ internal sealed class InfoTabRegistry
             rateStatus, ampStatus, elapsedValue, overallText);
         var renderer = new VarioRenderer(
             ratePlot, amplitudePlot, summary, new VarioBandBadgeControls(rateBandBadge, amplitudeBandBadge),
-            new VarioTableControls(rateCells, amplitudeCells), context.TextFontFamily);
+            new VarioReadoutControls(rateCells, amplitudeCells), context.TextFontFamily);
         var consumer = new VarioFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }

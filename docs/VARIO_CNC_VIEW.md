@@ -44,7 +44,7 @@ graph LR
 | Analysis tab router | Sends latest frames to registered tab consumers according to the app tab infrastructure. |
 | `VarioFrameConsumer` | Receives generic frame callbacks and delegates render work to `VarioRenderer`. |
 | `VarioRenderer` | Applies snapshot data to UI controls and plots. It skips repeated versions unless the review cursor changed. |
-| Avalonia controls | Show status chips, elapsed time, criteria flyout content, and exact numeric table values. |
+| Avalonia controls | Show status chips, elapsed time, criteria flyout content, and exact per-gauge readout-strip values. |
 | ScottPlot `AvaPlot` controls | Show rate and amplitude gauges with acceptable band, min/max, average, current marker, and labels. |
 
 ## Connector Catalog
@@ -79,7 +79,7 @@ sequenceDiagram
     Router->>Consumer: RenderFrame(frame, context)
     Consumer->>Renderer: RenderFrame(frame, context)
     Renderer->>Renderer: skip if same version and cursor
-    Renderer->>UI: update gauges, table, elapsed, verdicts
+    Renderer->>UI: update gauges, readout strips, elapsed, verdicts
 ```
 
 ## Runtime Properties

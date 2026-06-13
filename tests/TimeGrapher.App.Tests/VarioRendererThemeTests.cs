@@ -30,8 +30,8 @@ public sealed class VarioRendererThemeTests
         var summary = new VarioSummaryControls(
             new TextBlock(), new TextBlock(), new TextBlock(), new TextBlock());
         var bandBadges = new VarioBandBadgeControls(new Border(), new Border());
-        var table = new VarioTableControls(BuildCells(), BuildCells());
-        var renderer = new VarioRenderer(ratePlot, amplitudePlot, summary, bandBadges, table, "Arial");
+        var readouts = new VarioReadoutControls(BuildCells(), BuildCells());
+        var renderer = new VarioRenderer(ratePlot, amplitudePlot, summary, bandBadges, readouts, "Arial");
         renderer.CreateGraphs();
         renderer.RenderFrame(SampleFrame(), new AnalysisTabRenderContext(48000, 2));
 
@@ -56,8 +56,8 @@ public sealed class VarioRendererThemeTests
         var summary = new VarioSummaryControls(
             new TextBlock(), new TextBlock(), new TextBlock(), new TextBlock());
         var bandBadges = new VarioBandBadgeControls(new Border(), new Border());
-        var table = new VarioTableControls(BuildCells(), BuildCells());
-        var renderer = new VarioRenderer(ratePlot, amplitudePlot, summary, bandBadges, table, "Arial");
+        var readouts = new VarioReadoutControls(BuildCells(), BuildCells());
+        var renderer = new VarioRenderer(ratePlot, amplitudePlot, summary, bandBadges, readouts, "Arial");
         PlotThemePalette dark = Palette(text: 0xFFC2C8CE);
 
         renderer.CreateGraphs();

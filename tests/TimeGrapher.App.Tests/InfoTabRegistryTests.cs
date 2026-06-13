@@ -151,17 +151,22 @@ public sealed class InfoTabRegistryTests
     }
 
     [Fact]
-    public void VarioTableHeadersAreHighContrast()
+    public void VarioReadoutStripHeadersAreHighContrast()
     {
         Grid content = CreateVarioContent();
-        var table = Assert.IsType<Grid>(
-            content.Children.Single(child => Grid.GetRow(child) == 5));
-        TextBlock[] headers = table.Children
+        Border[] readouts = content.Children
+            .OfType<Border>()
+            .Where(child => Grid.GetRow(child) is 2 or 5)
+            .ToArray();
+        TextBlock[] headers = readouts
+            .Select(readout => Assert.IsType<Grid>(readout.Child))
+            .SelectMany(strip => strip.Children
             .OfType<TextBlock>()
-            .Where(text => Grid.GetRow(text) == 0)
+            .Where(text => Grid.GetRow(text) == 0))
             .ToArray();
 
-        Assert.Equal(6, headers.Length);
+        Assert.Equal(2, readouts.Length);
+        Assert.Equal(12, headers.Length);
         Assert.All(headers, header =>
         {
             Assert.True(header.Opacity >= 0.8);
@@ -176,7 +181,7 @@ public sealed class InfoTabRegistryTests
         Grid rateHeader = Assert.IsType<Grid>(
             content.Children.Single(child => Grid.GetRow(child) == 1));
         Grid amplitudeHeader = Assert.IsType<Grid>(
-            content.Children.Single(child => Grid.GetRow(child) == 3));
+            content.Children.Single(child => Grid.GetRow(child) == 4));
 
         Assert.Contains(
             Descendants(rateHeader).OfType<TextBlock>(),
@@ -223,11 +228,42 @@ public sealed class InfoTabRegistryTests
     }
 
     [Fact]
+    public void VarioReadoutStripsShowRenderedStatsNearEachGauge()
+    {
+        InfoTabRegistration registration = CreateVarioRegistration();
+        Grid content = Assert.IsType<Grid>(registration.TabItem.Content);
+
+        registration.Consumer.Initialize(new AnalysisTabResetContext(48000, 10, 250));
+        registration.Consumer.RenderFrame(
+            new AnalysisFrame
+            {
+                MetricsHistory = new BeatMetricsHistorySnapshot
+                {
+                    Version = 1,
+                    RateValid = true,
+                    RateSPerDay = 2.7,
+                    AmplitudeValid = true,
+                    AmplitudeDeg = 208.0,
+                    RateStats = new StatsSummary(true, -8.1, 6.3, 4.2, 1.65, 200),
+                    AmplitudeStats = new StatsSummary(true, 192.0, 216.0, 203.0, 5.2, 200),
+                },
+            },
+            new AnalysisTabRenderContext(48000, 2));
+
+        Assert.Equal(
+            new[] { "-8.1 s/d", "+4.2 s/d", "+6.3 s/d", "1.65 s/d", "+2.7 s/d", "14.4 s/d" },
+            ReadoutValues(content, row: 2));
+        Assert.Equal(
+            new[] { "192°", "203°", "216°", "5.20°", "208°", "24°" },
+            ReadoutValues(content, row: 5));
+    }
+
+    [Fact]
     public void VarioLegendNamesLineStylesForMarkers()
     {
         Grid content = CreateVarioContent();
         var legend = Assert.IsType<TextBlock>(
-            content.Children.Single(child => Grid.GetRow(child) == 6));
+            content.Children.Single(child => Grid.GetRow(child) == 7));
         string legendText = string.Concat(legend.Inlines!.OfType<Run>().Select(run => run.Text));
 
         Assert.Contains("Amber band", legendText);
@@ -258,6 +294,19 @@ public sealed class InfoTabRegistryTests
         return Descendants(content)
             .OfType<Border>()
             .Single(border => border.Child is TextBlock { Text: var value } && value == text);
+    }
+
+    private static string[] ReadoutValues(Grid content, int row)
+    {
+        var readout = Assert.IsType<Border>(
+            content.Children.Single(child => Grid.GetRow(child) == row));
+        var strip = Assert.IsType<Grid>(readout.Child);
+        return strip.Children
+            .OfType<TextBlock>()
+            .Where(text => Grid.GetRow(text) == 1)
+            .OrderBy(Grid.GetColumn)
+            .Select(text => text.Text ?? string.Empty)
+            .ToArray();
     }
 
     private static IEnumerable<Control> Descendants(Control control)
