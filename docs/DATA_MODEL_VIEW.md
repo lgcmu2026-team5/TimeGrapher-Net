@@ -294,7 +294,6 @@ class TgConfig {
     +int ManualBph
     +double HpfCutoffHz
     +double EnvelopeSmoothMs
-    +double EventMinSeparationMs
     +double SyncTolerancePct
     +double AutoDetectSeconds
     +int SyncLossMisses

@@ -89,7 +89,6 @@ public sealed class TgConfig
     public int ManualBph;
     public double HpfCutoffHz;           // 0 = 기본값 200.0
     public double EnvelopeSmoothMs;      // 0 = 0.15
-    public double EventMinSeparationMs;  // 0 = 2.0
     public double SyncTolerancePct;      // 0 = 3.0
     public double AutoDetectSeconds;     // 0 = 1.5
     public int SyncLossMisses;           // 0 = 12

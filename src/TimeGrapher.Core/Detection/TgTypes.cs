@@ -53,14 +53,6 @@ public sealed class TgConfig
     /* Optional - 0 = library default */
     public double HpfCutoffHz;           // default 200.0
     public double EnvelopeSmoothMs;      // default 0.15
-    /* Legacy/reserved: documented as a 2 ms event refractory but NOT
-     * consumed by the detection chain (copied in TgDetector, read nowhere).
-     * The existing gates dominate it structurally - silence gate 20 ms
-     * (0.4T after lock), A-to-A 0.7T, C-search skip >= 2.5 ms - so the only
-     * place it could ever fire is the A->C peak-fallback path, where
-     * dropping the C would break amplitude pairing. Kept for source
-     * compatibility; wire it behind TgDetectorOptions if ever revived. */
-    public double EventMinSeparationMs;  // reserved, default 2.0, unconsumed
     public double SyncTolerancePct;      // default 3.0
     public double AutoDetectSeconds;     // default 1.5
     public int SyncLossMisses;           // default 12
@@ -90,7 +82,6 @@ public sealed class TgConfig
             ManualBph = 0,
             HpfCutoffHz = 200.0,
             EnvelopeSmoothMs = 0.15,
-            EventMinSeparationMs = 2.0,
             SyncTolerancePct = 3.0,
             AutoDetectSeconds = 1.5,
             SyncLossMisses = 12,

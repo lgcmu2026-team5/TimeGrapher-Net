@@ -108,7 +108,6 @@ public sealed class TgDetector
             ManualBph = cfg.ManualBph,
             HpfCutoffHz = cfg.HpfCutoffHz,
             EnvelopeSmoothMs = cfg.EnvelopeSmoothMs,
-            EventMinSeparationMs = cfg.EventMinSeparationMs,
             SyncTolerancePct = cfg.SyncTolerancePct,
             AutoDetectSeconds = cfg.AutoDetectSeconds,
             SyncLossMisses = cfg.SyncLossMisses,
@@ -123,7 +122,6 @@ public sealed class TgDetector
         /* Apply zero-defaults at runtime */
         if (_cfg.HpfCutoffHz == 0.0) _cfg.HpfCutoffHz = 200.0;
         if (_cfg.EnvelopeSmoothMs == 0.0) _cfg.EnvelopeSmoothMs = 0.15;
-        if (_cfg.EventMinSeparationMs == 0.0) _cfg.EventMinSeparationMs = 2.0;
         if (_cfg.SyncTolerancePct == 0.0) _cfg.SyncTolerancePct = 3.0;
         if (_cfg.AutoDetectSeconds == 0.0) _cfg.AutoDetectSeconds = 1.5;
         if (_cfg.SyncLossMisses == 0) _cfg.SyncLossMisses = 12;
