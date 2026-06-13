@@ -286,35 +286,43 @@ public sealed class TgDetector
         /* V5.6: regime-change reset. */
         if (_det.ConsumeRegimeReset() != 0)
         {
-            result.DetectorResetEvent = true;
+            bool hasLockContext = _currentBph > 0 || _sync.Synced != 0;
 
-            /* Capture the triggering peak before flushing the detector. */
-            double seedPeak = _det.BurstMax;
+            /* Before BPH lock, a silence-collapsed noise floor can make the
+             * first healthy ticks look like a regime jump. Consume that
+             * bootstrap trip but keep collecting A-event history. */
+            if (hasLockContext)
+            {
+                result.DetectorResetEvent = true;
 
-            /* Flush detector adaptive state, saving/restoring the sample
-             * clock and env_ring abs-index reference around the reset. */
-            ulong savedTotal = _det.TotalSamples;
-            ulong savedEnvNewest = _det.EnvRingNewestAbs;
-            int savedEnvHas = _det.EnvRingHasData;
-            _det.Reset();
-            _det.TotalSamples = savedTotal;
-            _det.EnvRingNewestAbs = savedEnvNewest;
-            _det.EnvRingHasData = savedEnvHas;
+                /* Capture the triggering peak before flushing the detector. */
+                double seedPeak = _det.BurstMax;
 
-            /* Re-seed the regime ring so the next beat doesn't re-trip. */
-            _det.RegimePeakRing[0] = seedPeak;
-            _det.RegimePeakCount = 1;
-            _det.RegimePeakHead = 1;
+                /* Flush detector adaptive state, saving/restoring the sample
+                 * clock and env_ring abs-index reference around the reset. */
+                ulong savedTotal = _det.TotalSamples;
+                ulong savedEnvNewest = _det.EnvRingNewestAbs;
+                int savedEnvHas = _det.EnvRingHasData;
+                _det.Reset();
+                _det.TotalSamples = savedTotal;
+                _det.EnvRingNewestAbs = savedEnvNewest;
+                _det.EnvRingHasData = savedEnvHas;
 
-            /* Flush library-level state too. */
-            _currentBph = 0;
-            _currentBeatPeriod = 0.0;
-            _evHistoryCount = 0;
-            _evHistoryHead = 0;
-            _sync.Reset();
+                /* Re-seed the regime ring so the next beat doesn't re-trip. */
+                _det.RegimePeakRing[0] = seedPeak;
+                _det.RegimePeakCount = 1;
+                _det.RegimePeakHead = 1;
 
-            /* Suppress the raw events from THIS batch. */
-            rawCount = 0;
+                /* Flush library-level state too. */
+                _currentBph = 0;
+                _currentBeatPeriod = 0.0;
+                _evHistoryCount = 0;
+                _evHistoryHead = 0;
+                _sync.Reset();
+
+                /* Suppress the raw events from THIS batch. */
+                rawCount = 0;
+            }
         }
 
         /* Push A events into BPH history */

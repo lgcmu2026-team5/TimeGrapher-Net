@@ -102,14 +102,13 @@ internal static class AdverseScenarios
             PcmPeak: 0.60, NoisePeak: 0.01, Realistic: false,
             GainStepAtS: 6.0, GainStepFactor: 0.13, EvalStartS: 10.0,
             Default: new AdverseGates(MustSync: true, MinRecall: 0.50)),
-        // Bootstrap behind a silent lead-in (W-2/W-13 bootstrap paths).
-        // Still under investigation: a silence-collapsed noise floor can make
-        // early ticks trip the regime detector before the auto-detect window
-        // can complete. INFO-only so fixing it does not fail the verifier.
+        // Bootstrap behind a silent lead-in (W-2/W-13 bootstrap paths). A
+        // silence-collapsed noise floor may still trip the regime detector,
+        // but pre-lock trips must not flush the BPH acquisition history.
         new("leadin-quiet", Bph: 21600, SampleRate: 48000, Seconds: 12,
             PcmPeak: 0.30, NoisePeak: 0.01, Realistic: false,
             SilenceLeadInSamples: 96000,
-            Default: new AdverseGates(InfoOnly: true)),
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.80, MaxResets: 0)),
         // No watch at all: the detector must NOT lock onto noise (false-lock
         // guard).
         new("noise-only", Bph: 21600, SampleRate: 48000, Seconds: 12,

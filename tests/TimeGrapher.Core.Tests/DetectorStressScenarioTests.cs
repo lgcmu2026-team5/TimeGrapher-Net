@@ -13,6 +13,8 @@ namespace TimeGrapher.Core.Tests;
 ///    The detector rides it out without reset storms.
 ///  - quiet-step: a 0.13x gain step after 6 s. The detector decays the
 ///    reference and re-acquires.
+///  - leadin-quiet: two seconds of silence before a healthy watch does not
+///    let bootstrap regime trips wipe BPH acquisition history.
 /// </summary>
 public sealed class DetectorStressScenarioTests
 {
@@ -21,7 +23,8 @@ public sealed class DetectorStressScenarioTests
     private static StressResult Run(
         double pcmPeak, double noisePeak, int bph, int seconds,
         double impulseRate = 0.0, double impulseAmp = 0.0,
-        double gainStepAtS = 0.0, double gainStepFactor = 1.0)
+        double gainStepAtS = 0.0, double gainStepFactor = 1.0,
+        int silenceLeadInSamples = 0)
     {
         WatchSynthStreamConfig cfg = WatchSynthStreamConfig.Clean();
         cfg.SampleRateHz = 48000;
@@ -47,6 +50,19 @@ public sealed class DetectorStressScenarioTests
         int resets = 0;
         var block = new float[4096];
         DetectorMetricsBlockUpdate update = default!;
+
+        while (silenceLeadInSamples > 0)
+        {
+            int slice = Math.Min(block.Length, silenceLeadInSamples);
+            Array.Clear(block, 0, slice);
+            update = engine.Process(block.AsSpan(0, slice));
+            if (update.Result.DetectorResetEvent)
+            {
+                resets++;
+            }
+            silenceLeadInSamples -= slice;
+        }
+
         long total = 48000L * seconds;
         long done = 0;
         long stepAt = gainStepAtS > 0.0 ? (long)(gainStepAtS * 48000) : long.MaxValue;
@@ -94,6 +110,17 @@ public sealed class DetectorStressScenarioTests
         StressResult result = Run(pcmPeak: 0.60, noisePeak: 0.01,
             bph: 21600, seconds: 16, gainStepAtS: 6.0, gainStepFactor: 0.13);
 
+        Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
+        Assert.Equal(21600, result.DetectedBph);
+    }
+
+    [Fact]
+    public void SilentLeadIn_DefaultDetectorAcquiresLock()
+    {
+        StressResult result = Run(pcmPeak: 0.30, noisePeak: 0.01,
+            bph: 21600, seconds: 12, silenceLeadInSamples: 96000);
+
+        Assert.Equal(0, result.Resets);
         Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
         Assert.Equal(21600, result.DetectedBph);
     }
