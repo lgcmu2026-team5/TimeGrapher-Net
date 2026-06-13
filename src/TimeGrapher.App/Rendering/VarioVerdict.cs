@@ -94,11 +94,11 @@ internal readonly record struct VarioVerdict(string Text, VarioVerdictLevel Leve
         var level = (VarioVerdictLevel)Math.Max((int)rate.Level, (int)amplitude.Level);
         string action = level switch
         {
-            VarioVerdictLevel.Bad => "ALERT — service amplitude or rate before recording",
-            VarioVerdictLevel.Warn => "WATCH — continue measuring before judging",
-            _ => "OK — stable enough to record",
+            VarioVerdictLevel.Bad => "ALERT - Service required before recording",
+            VarioVerdictLevel.Warn => "WATCH - Keep measuring before judging",
+            _ => "OK - Stable enough to record",
         };
 
-        return new VarioVerdict($"Overall — {action}", level);
+        return new VarioVerdict($"Overall: {action}", level);
     }
 }

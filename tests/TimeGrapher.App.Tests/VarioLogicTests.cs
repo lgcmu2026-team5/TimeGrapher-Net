@@ -119,7 +119,7 @@ public sealed class VarioLogicTests
         Assert.Equal(VarioVerdictLevel.Bad, VarioVerdict.Overall(good, bad).Level);
 
         VarioVerdict overall = VarioVerdict.Overall(good, bad);
-        Assert.StartsWith("Overall — ALERT", overall.Text, StringComparison.Ordinal);
+        Assert.Equal("Overall: ALERT - Service required before recording", overall.Text);
         Assert.DoesNotContain("Stable · in range", overall.Text);
         Assert.DoesNotContain("Low · service", overall.Text);
 
