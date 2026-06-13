@@ -46,4 +46,7 @@ internal static class VarioGaugePolicy
         double pad = (hi - lo) * GaugePaddingFraction;
         return (lo - pad, hi + pad);
     }
+
+    public static bool ShouldShowAcceptBand(StatsSummary stats, double? current) =>
+        stats.Valid || current.HasValue;
 }

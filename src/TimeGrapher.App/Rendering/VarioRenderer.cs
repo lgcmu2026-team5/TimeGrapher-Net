@@ -149,6 +149,7 @@ internal sealed class VarioRenderer
             plot.Grid.YAxisStyle.IsVisible = false;
 
             gauge.AcceptBand = plot.Add.HorizontalSpan(gauge.AcceptMin, gauge.AcceptMax);
+            gauge.AcceptBand.IsVisible = false;
             gauge.MinLine = AddLine(plot, 3, LinePattern.Solid);
             gauge.MaxLine = AddLine(plot, 3, LinePattern.Solid);
             gauge.AvgLine = AddLine(plot, 4, LinePattern.Solid);
@@ -218,6 +219,11 @@ internal sealed class VarioRenderer
         (double lo, double hi) = VarioGaugePolicy.GaugeRange(gauge.AcceptMin, gauge.AcceptMax, stats, current);
         plot.Axes.SetLimitsX(lo, hi);
         plot.Axes.SetLimitsY(0.0, YMax);
+
+        if (gauge.AcceptBand != null)
+        {
+            gauge.AcceptBand.IsVisible = VarioGaugePolicy.ShouldShowAcceptBand(stats, current);
+        }
 
         PositionLine(gauge.MinLine, min);
         PositionLine(gauge.MaxLine, max);

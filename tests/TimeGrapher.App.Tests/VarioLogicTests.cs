@@ -34,6 +34,16 @@ public sealed class VarioLogicTests
     }
 
     [Fact]
+    public void AcceptBand_IsHiddenUntilAReadingExists()
+    {
+        var stats = new StatsSummary(Valid: true, Min: -2.0, Max: 4.0, Mean: 1.0, Sigma: 0.5, Count: 4);
+
+        Assert.False(VarioGaugePolicy.ShouldShowAcceptBand(default, current: null));
+        Assert.True(VarioGaugePolicy.ShouldShowAcceptBand(stats, current: null));
+        Assert.True(VarioGaugePolicy.ShouldShowAcceptBand(default, current: 1.0));
+    }
+
+    [Fact]
     public void AmplitudePolicy_MatchesTraceAlertBand()
     {
         // One source of truth: the vario green zone IS the trace alert band.
