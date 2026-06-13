@@ -81,9 +81,8 @@ internal readonly record struct VarioVerdict(string Text, VarioVerdictLevel Leve
     }
 
     /// <summary>
-    /// Combined one-line conclusion across both measures: takes the worse of the
-    /// two severities and names each measure's verdict. Stays Pending (no opinion)
-    /// until both measures have a verdict.
+    /// Combined one-line action across both measures: takes the worse severity
+    /// and avoids repeating the measure verdicts already shown in Summary.
     /// </summary>
     public static VarioVerdict Overall(VarioVerdict rate, VarioVerdict amplitude)
     {
@@ -93,15 +92,13 @@ internal readonly record struct VarioVerdict(string Text, VarioVerdictLevel Leve
         }
 
         var level = (VarioVerdictLevel)Math.Max((int)rate.Level, (int)amplitude.Level);
-        string conclusion = level switch
+        string action = level switch
         {
-            VarioVerdictLevel.Bad => "Needs attention",
-            VarioVerdictLevel.Warn => "Acceptable — watch",
-            _ => "Healthy & stable",
+            VarioVerdictLevel.Bad => "ALERT — service amplitude or rate before recording",
+            VarioVerdictLevel.Warn => "WATCH — continue measuring before judging",
+            _ => "OK — stable enough to record",
         };
 
-        return new VarioVerdict(
-            $"Overall — {conclusion}     Rate: {rate.Text}     Amplitude: {amplitude.Text}",
-            level);
+        return new VarioVerdict($"Overall — {action}", level);
     }
 }

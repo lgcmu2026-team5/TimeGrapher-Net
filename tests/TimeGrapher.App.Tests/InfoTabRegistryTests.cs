@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
 using TimeGrapher.App.Tabs;
@@ -118,6 +119,19 @@ public sealed class InfoTabRegistryTests
             Assert.True(header.Opacity >= 0.8);
             Assert.Equal(FontWeight.SemiBold, header.FontWeight);
         });
+    }
+
+    [Fact]
+    public void VarioLegendNamesLineStylesForMarkers()
+    {
+        Grid content = CreateVarioContent();
+        var legend = Assert.IsType<TextBlock>(
+            content.Children.Single(child => Grid.GetRow(child) == 7));
+        string legendText = string.Concat(legend.Inlines!.OfType<Run>().Select(run => run.Text));
+
+        Assert.Contains("Blue solid", legendText);
+        Assert.Contains("Red solid", legendText);
+        Assert.Contains("Black dashed", legendText);
     }
 
     private static Grid CreateVarioContent()

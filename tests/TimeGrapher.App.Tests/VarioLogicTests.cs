@@ -109,8 +109,9 @@ public sealed class VarioLogicTests
         Assert.Equal(VarioVerdictLevel.Bad, VarioVerdict.Overall(good, bad).Level);
 
         VarioVerdict overall = VarioVerdict.Overall(good, bad);
-        Assert.Contains("Stable · in range", overall.Text);
-        Assert.Contains("Low · service", overall.Text);
+        Assert.StartsWith("Overall — ALERT", overall.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Stable · in range", overall.Text);
+        Assert.DoesNotContain("Low · service", overall.Text);
 
         Assert.Equal(VarioVerdictLevel.Pending, VarioVerdict.Overall(VarioVerdict.Measuring, good).Level);
     }
@@ -141,23 +142,23 @@ public sealed class VarioLogicTests
     [Fact]
     public void Layout_TightCluster_KeepsOnlyHighestPriorityLabel()
     {
-        // A very stable watch: min≈max≈avg≈now. Only "now" survives; the others
+        // A very stable watch: min≈max≈avg≈now. Only "avg" survives; the others
         // would print on top of it, so they are dropped (numbers stay in the table).
         IReadOnlyList<GaugeLabel> labels =
             VarioGaugeLayout.LayOut(195, 305, min: 200, max: 201, avg: 200.5, current: 200.7);
 
         GaugeLabel only = Assert.Single(labels);
-        Assert.Equal("now", only.Role);
+        Assert.Equal("avg", only.Role);
     }
 
     [Fact]
-    public void Layout_AvgAndNowClose_DropsLowerPriorityAvgLabel()
+    public void Layout_AvgAndNowClose_DropsLowerPriorityNowLabel()
     {
         IReadOnlyList<GaugeLabel> labels =
             VarioGaugeLayout.LayOut(185, 305, min: 190, max: 240, avg: 215, current: 215.5);
 
-        Assert.DoesNotContain(labels, l => l.Role == "avg");
-        Assert.Contains(labels, l => l.Role == "now");
+        Assert.Contains(labels, l => l.Role == "avg");
+        Assert.DoesNotContain(labels, l => l.Role == "now");
         AssertNoLabelOverlap(labels, 185, 305);
     }
 

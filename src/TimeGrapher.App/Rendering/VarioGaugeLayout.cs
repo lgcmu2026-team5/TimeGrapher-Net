@@ -28,8 +28,8 @@ internal static class VarioGaugeLayout
     public const double EdgeFraction = 0.05;
 
     /// <summary>
-    /// Labels to draw, ordered left-to-right. Priority when crowded: current &gt;
-    /// average &gt; max &gt; min — the bar ends are self-evident, the interpretive
+    /// Labels to draw, ordered left-to-right. Priority when crowded: average &gt;
+    /// current &gt; max &gt; min — the bar ends are self-evident, the interpretive
     /// lines are not.
     /// </summary>
     public static IReadOnlyList<GaugeLabel> LayOut(
@@ -46,14 +46,14 @@ internal static class VarioGaugeLayout
 
         // Candidates in descending priority.
         var candidates = new List<(string Role, double X)>(4);
-        if (current is double c)
-        {
-            candidates.Add(("now", c));
-        }
-
         if (avg is double a)
         {
             candidates.Add(("avg", a));
+        }
+
+        if (current is double c)
+        {
+            candidates.Add(("now", c));
         }
 
         if (max is double mx)

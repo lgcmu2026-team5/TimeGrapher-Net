@@ -529,11 +529,11 @@ internal sealed class InfoTabRegistry
         {
             Swatch("Green band", Color.FromRgb(0x4C, 0xAF, 0x50)),
             new Run(" = acceptable range     "),
-            Swatch("Blue", Color.FromRgb(0x2D, 0x7D, 0xD2)),
+            Swatch("Blue solid", Color.FromRgb(0x2D, 0x7D, 0xD2)),
             new Run(" = measured min/max     "),
-            Swatch("Red", Color.FromRgb(0xC0, 0x39, 0x2B)),
+            Swatch("Red solid", Color.FromRgb(0xC0, 0x39, 0x2B)),
             new Run(" = average     "),
-            Swatch("Black", Color.FromRgb(0x20, 0x20, 0x20)),
+            Swatch("Black dashed", Color.FromRgb(0x20, 0x20, 0x20)),
             new Run(" = current"),
         };
 

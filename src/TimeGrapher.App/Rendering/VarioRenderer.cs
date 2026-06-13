@@ -21,7 +21,7 @@ internal sealed record VarioTableControls(
 /// <summary>
 /// Vario display: per-position stability of rate and amplitude. Each gauge shows
 /// the acceptable band (green), the measured min and max (blue lines), the
-/// average (red line) and the current reading (black line) — opaque lines so they
+/// average (red solid line) and the current reading (black dashed line) — opaque lines so they
 /// stay legible over the band rather than blending a translucent fill into it;
 /// short role labels are placed by <see cref="VarioGaugeLayout"/> so they never
 /// overlap or clip. A SUMMARY bar carries the verdicts and elapsed time;
@@ -146,10 +146,10 @@ internal sealed class VarioRenderer
             plot.Grid.YAxisStyle.IsVisible = false;
 
             gauge.AcceptBand = plot.Add.HorizontalSpan(gauge.AcceptMin, gauge.AcceptMax);
-            gauge.MinLine = AddLine(plot, 3);
-            gauge.MaxLine = AddLine(plot, 3);
-            gauge.AvgLine = AddLine(plot, 3);
-            gauge.NowLine = AddLine(plot, 2);
+            gauge.MinLine = AddLine(plot, 3, LinePattern.Solid);
+            gauge.MaxLine = AddLine(plot, 3, LinePattern.Solid);
+            gauge.AvgLine = AddLine(plot, 4, LinePattern.Solid);
+            gauge.NowLine = AddLine(plot, 2, LinePattern.Dashed);
             for (int i = 0; i < LabelPoolSize; i++)
             {
                 Text label = plot.Add.Text(string.Empty, 0.0, LabelY);
@@ -343,11 +343,12 @@ internal sealed class VarioRenderer
         }
     }
 
-    private static LinePlot AddLine(Plot plot, float width)
+    private static LinePlot AddLine(Plot plot, float width, LinePattern pattern)
     {
         LinePlot line = plot.Add.Line(0.0, 0.0, 0.0, 1.0);
         line.MarkerStyle.IsVisible = false;
         line.LineWidth = width;
+        line.LinePattern = pattern;
         line.IsVisible = false;
         return line;
     }
