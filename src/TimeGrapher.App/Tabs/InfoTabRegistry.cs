@@ -361,13 +361,42 @@ internal sealed class InfoTabRegistry
     {
         var font = new FontFamily(context.TextFontFamily);
 
-        TextBlock SectionHeader(string text) => new()
+        Grid GaugeHeader(string text, string bandText)
         {
-            Text = text,
-            FontSize = 13,
-            FontWeight = FontWeight.Bold,
-            Margin = new Thickness(8, 4, 8, 0),
-        };
+            var header = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+                Margin = new Thickness(8, 2, 8, 0),
+            };
+            var title = new TextBlock
+            {
+                Text = text,
+                FontSize = 13,
+                FontWeight = FontWeight.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var bandBadge = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x22, 0x00, 0x72, 0xB2)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0x72, 0xB2)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(6, 1, 6, 1),
+                Margin = new Thickness(10, 0, 0, 0),
+                Child = new TextBlock
+                {
+                    Text = bandText,
+                    FontSize = 11,
+                    FontWeight = FontWeight.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            Grid.SetColumn(title, 0);
+            Grid.SetColumn(bandBadge, 1);
+            header.Children.Add(title);
+            header.Children.Add(bandBadge);
+            return header;
+        }
 
         var ratePlot = new AvaPlot();
         var amplitudePlot = new AvaPlot();
@@ -525,7 +554,7 @@ internal sealed class InfoTabRegistry
         Run Swatch(string text, Color color) => new(text) { Foreground = new SolidColorBrush(color), FontWeight = FontWeight.Bold };
         legend.Inlines = new InlineCollection
         {
-            Swatch("Green band", Color.FromRgb(0x4C, 0xAF, 0x50)),
+            Swatch("Pale green band + blue edge", Color.FromRgb(0x00, 0x72, 0xB2)),
             new Run(" = acceptable range     "),
             Swatch("Blue solid", Color.FromRgb(0x2D, 0x7D, 0xD2)),
             new Run(" = measured min/max     "),
@@ -542,8 +571,8 @@ internal sealed class InfoTabRegistry
         Control[] rows =
         {
             summaryCard,
-            SectionHeader("RATE (s/d)"), ratePlot,
-            SectionHeader("AMPLITUDE (°)"), amplitudePlot,
+            GaugeHeader("RATE (s/d)", "Accept band -10 to +10 s/d"), ratePlot,
+            GaugeHeader("AMPLITUDE (°)", "Accept band 270 to 300°"), amplitudePlot,
             table, legend,
         };
         for (int i = 0; i < rows.Length; i++)

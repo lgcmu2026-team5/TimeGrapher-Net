@@ -41,8 +41,10 @@ internal sealed class VarioRenderer
 
     private const uint MinMaxBlue = 0xFF2D7DD2;
     private const uint AvgRed = 0xFFC0392B;
-    private const uint AcceptGreen = 0xFF4CAF50;
-    private const byte AcceptBandAlpha = 56;
+    private const uint AcceptBandFill = 0xFF4CAF50;
+    private const uint AcceptBandEdge = 0xFF0072B2;
+    private const byte AcceptBandAlpha = 30;
+    private const byte AcceptBandEdgeAlpha = 150;
 
     // Y layout inside each gauge: bands fill the plot; labels sit in the headroom.
     private const double YMax = 1.22;
@@ -142,6 +144,8 @@ internal sealed class VarioRenderer
             plot.Axes.Left.TickLabelStyle.IsVisible = false;
             plot.Axes.Left.MajorTickStyle.Length = 0;
             plot.Axes.Left.MinorTickStyle.Length = 0;
+            plot.Axes.Left.IsVisible = false;
+            plot.Axes.Right.IsVisible = false;
             plot.Grid.YAxisStyle.IsVisible = false;
 
             gauge.AcceptBand = plot.Add.HorizontalSpan(gauge.AcceptMin, gauge.AcceptMax);
@@ -356,8 +360,9 @@ internal sealed class VarioRenderer
     {
         if (gauge.AcceptBand != null)
         {
-            gauge.AcceptBand.FillStyle.Color = Color.FromARGB(AcceptGreen).WithAlpha(AcceptBandAlpha);
-            gauge.AcceptBand.LineStyle.Color = Color.FromARGB(AcceptGreen).WithAlpha((byte)(AcceptBandAlpha * 2));
+            gauge.AcceptBand.FillStyle.Color = Color.FromARGB(AcceptBandFill).WithAlpha(AcceptBandAlpha);
+            gauge.AcceptBand.LineStyle.Color = Color.FromARGB(AcceptBandEdge).WithAlpha(AcceptBandEdgeAlpha);
+            gauge.AcceptBand.LineStyle.Width = 2;
         }
 
         if (gauge.MinLine != null)

@@ -126,6 +126,23 @@ public sealed class InfoTabRegistryTests
     }
 
     [Fact]
+    public void VarioGaugeHeadersUseBlankSpaceForAcceptBandBadges()
+    {
+        Grid content = CreateVarioContent();
+        Grid rateHeader = Assert.IsType<Grid>(
+            content.Children.Single(child => Grid.GetRow(child) == 1));
+        Grid amplitudeHeader = Assert.IsType<Grid>(
+            content.Children.Single(child => Grid.GetRow(child) == 3));
+
+        Assert.Contains(
+            Descendants(rateHeader).OfType<TextBlock>(),
+            text => text.Text == "Accept band -10 to +10 s/d");
+        Assert.Contains(
+            Descendants(amplitudeHeader).OfType<TextBlock>(),
+            text => text.Text == "Accept band 270 to 300°");
+    }
+
+    [Fact]
     public void VarioLegendNamesLineStylesForMarkers()
     {
         Grid content = CreateVarioContent();
@@ -133,6 +150,7 @@ public sealed class InfoTabRegistryTests
             content.Children.Single(child => Grid.GetRow(child) == 6));
         string legendText = string.Concat(legend.Inlines!.OfType<Run>().Select(run => run.Text));
 
+        Assert.Contains("Pale green band + blue edge", legendText);
         Assert.Contains("Blue solid", legendText);
         Assert.Contains("Red solid", legendText);
         Assert.Contains("Black dashed", legendText);
