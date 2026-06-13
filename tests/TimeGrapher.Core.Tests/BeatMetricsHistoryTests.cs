@@ -124,6 +124,32 @@ public sealed class BeatMetricsHistoryTests
     }
 
     [Fact]
+    public void VarioStatsAndElapsedRestartOnPositionChangeButSeriesAndAggregatesStay()
+    {
+        var history = new BeatMetricsHistory();
+        history.Record(BeatUpdate(1, 0.125, rateSPerDay: 4.0));
+        history.Record(BeatUpdate(2, 0.250, rateSPerDay: 8.0));
+        BeatMetricsHistorySnapshot? before = history.CurrentSnapshot();
+        Assert.Equal(2, before!.RateStats.Count);
+        Assert.Equal(0.250, before.StatsElapsedS, 9);
+
+        // Turn the watch to a new position, then record one beat there.
+        history.SetActivePosition(WatchPosition.P6H);
+        history.Record(BeatUpdate(3, 5.250, rateSPerDay: -3.0));
+
+        BeatMetricsHistorySnapshot? after = history.CurrentSnapshot();
+        // Vario stats now cover only the new position...
+        Assert.Equal(1, after!.RateStats.Count);
+        Assert.Equal(-3.0, after.RateStats.Min);
+        Assert.Equal(-3.0, after.RateStats.Max);
+        // ...and the elapsed clock restarts from the position change (5.250 − 0.250).
+        Assert.Equal(5.0, after.StatsElapsedS, 9);
+        // The live series (Trace/Long-Term) and per-position aggregates are untouched.
+        Assert.Equal(3, after.Rate.Y.Count);
+        Assert.Equal(2, after.Positions.Count);
+    }
+
+    [Fact]
     public void RunningStatsAreInvalidWithoutSamplesAndClearOnReset()
     {
         var history = new BeatMetricsHistory();

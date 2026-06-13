@@ -80,10 +80,16 @@ public sealed class BeatMetricsHistorySnapshot
     /// <summary>Stream time (s) of the newest recorded beat.</summary>
     public double LatestTimeS { get; init; }
 
-    /// <summary>Running rate (s/d) stability statistics since start (Vario display).</summary>
+    /// <summary>
+    /// Elapsed measurement time (s) covered by <see cref="RateStats"/>/<see cref="AmplitudeStats"/>:
+    /// time since the current watch position started, since those stats restart per position.
+    /// </summary>
+    public double StatsElapsedS { get; init; }
+
+    /// <summary>Running rate (s/d) stability statistics for the current position (Vario display).</summary>
     public StatsSummary RateStats { get; init; }
 
-    /// <summary>Running amplitude (deg, tic/toc pair averages) stability statistics since start.</summary>
+    /// <summary>Running amplitude (deg, tic/toc pair averages) stability statistics for the current position.</summary>
     public StatsSummary AmplitudeStats { get; init; }
 
     /// <summary>Watch test position new measurements are currently tagged with.</summary>

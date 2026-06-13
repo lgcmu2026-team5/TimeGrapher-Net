@@ -23,7 +23,9 @@ public sealed class BeatMetricsHistory
     private readonly DecimatingSeries _beatError;
 
     // Vario stability statistics: fed per beat (before decimation), so min/max/
-    // mean/sigma stay exact however coarse the plotted series become.
+    // mean/sigma stay exact however coarse the plotted series become. They cover a
+    // single watch position and restart on a position change (see SetActivePosition),
+    // because mixing positions would inflate the spread and misreport stability.
     private readonly RunningStats _rateStats = new();
     private readonly RunningStats _amplitudeStats = new();
 
@@ -43,6 +45,10 @@ public sealed class BeatMetricsHistory
     private bool _beatErrorValid;
     private double _beatErrorSignedMs;
     private double _latestTimeS;
+
+    // Baseline for the Vario stats' elapsed clock, re-anchored on a position change
+    // so the displayed elapsed time counts from when the current position started.
+    private double _statsStartTimeS;
 
     private bool _dirty;
 
@@ -75,6 +81,12 @@ public sealed class BeatMetricsHistory
         }
 
         _activePosition = position;
+        // Vario reports stability for the current position only, so its running
+        // statistics and elapsed clock restart when the watch turns to a new
+        // position. The live series and per-position aggregates are untouched.
+        _rateStats.Reset();
+        _amplitudeStats.Reset();
+        _statsStartTimeS = _latestTimeS;
         _dirty = true;
         _publishImmediately = true;
     }
@@ -142,6 +154,7 @@ public sealed class BeatMetricsHistory
         _amplitudeValid = false;
         _beatErrorValid = false;
         _latestTimeS = 0.0;
+        _statsStartTimeS = 0.0;
         _dirty = false;
         _publishImmediately = false;
         _snapshot = null;
@@ -203,6 +216,7 @@ public sealed class BeatMetricsHistory
             BeatErrorValid = _beatErrorValid,
             BeatErrorSignedMs = _beatErrorSignedMs,
             LatestTimeS = _latestTimeS,
+            StatsElapsedS = Math.Max(0.0, _latestTimeS - _statsStartTimeS),
             RateStats = Summarize(_rateStats),
             AmplitudeStats = Summarize(_amplitudeStats),
             ActivePosition = _activePosition,
