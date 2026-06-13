@@ -413,15 +413,24 @@ internal sealed class InfoTabRegistry
             summaryColumns.Children.Add(summaryCells[c]);
         }
 
-        var summaryStack = new StackPanel();
-        summaryStack.Children.Add(new TextBlock
+        var overallText = new TextBlock
         {
-            Text = "VARIO SUMMARY",
-            FontSize = 11,
-            Opacity = 0.75,
-            FontWeight = FontWeight.SemiBold,
+            FontSize = 13,
+            FontWeight = FontWeight.Bold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(10, 4, 10, 4),
+        };
+        var overallBox = new Border
+        {
+            Child = overallText,
+            CornerRadius = new CornerRadius(5),
+            BorderThickness = new Thickness(1),
             Margin = new Thickness(12, 6, 12, 0),
-        });
+            IsVisible = false,
+        };
+
+        var summaryStack = new StackPanel();
+        summaryStack.Children.Add(overallBox);
         summaryStack.Children.Add(summaryColumns);
         var summaryCard = new Border
         {
@@ -432,17 +441,6 @@ internal sealed class InfoTabRegistry
             Background = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0xFF, 0xFF)),
             Margin = new Thickness(16, 8, 16, 4),
             Padding = new Thickness(0, 0, 0, 6),
-        };
-
-        // --- Overall conclusion strip (renderer fills text/colour, hidden until ready) ---
-        var overallText = new TextBlock { FontSize = 13, FontWeight = FontWeight.Bold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 4, 10, 4) };
-        var overallBox = new Border
-        {
-            Child = overallText,
-            CornerRadius = new CornerRadius(5),
-            BorderThickness = new Thickness(1),
-            Margin = new Thickness(16, 0, 16, 4),
-            IsVisible = false,
         };
 
         // --- Numeric table: exact numbers live here; gauges show position only ---
@@ -539,11 +537,11 @@ internal sealed class InfoTabRegistry
 
         var grid = new Grid
         {
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*,Auto,*,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,*,Auto,Auto"),
         };
         Control[] rows =
         {
-            summaryCard, overallBox,
+            summaryCard,
             SectionHeader("RATE (s/d)"), ratePlot,
             SectionHeader("AMPLITUDE (°)"), amplitudePlot,
             table, legend,
@@ -556,7 +554,7 @@ internal sealed class InfoTabRegistry
 
         if (CreateWaitingOverlay(context.ViewModel) is { } overlay)
         {
-            Grid.SetRow(overlay, 3);
+            Grid.SetRow(overlay, 2);
             grid.Children.Add(overlay);
         }
 
