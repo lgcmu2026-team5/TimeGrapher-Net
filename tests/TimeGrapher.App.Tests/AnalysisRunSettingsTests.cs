@@ -6,15 +6,15 @@ using Xunit;
 namespace TimeGrapher.App.Tests;
 
 /// <summary>
-/// Pins the run-settings -> worker-config mapping of the robust-detection
-/// preset: unchecked must wire null/null (the bit-identical original
-/// pipeline - the user-facing leg of the fidelity invariant), checked must
-/// wire exactly the composition the verifier's robust profile froze by A/B
-/// measurement (Robust() options + PLL veto gate).
+/// Pins the run-settings -> worker-config policy: adaptive floor + regime
+/// guard (the regression-free pair, per the adverse A/B measurements) are
+/// ALWAYS on for GUI runs, while the PLL event veto - which boosts precision
+/// on weak/impulsive signals but costs recall under extreme sustained noise
+/// - stays behind the checkbox, default off.
 /// </summary>
 public sealed class AnalysisRunSettingsTests
 {
-    private static AnalysisRunSettings NewSettings(bool robustDetection) => new(
+    private static AnalysisRunSettings NewSettings(bool pllEventVeto) => new(
         SampleRate: 48000,
         LiftAngle: 52.0,
         AveragingPeriod: 2,
@@ -25,22 +25,24 @@ public sealed class AnalysisRunSettingsTests
         SoundImageWidth: 100,
         SoundImageHeight: 100,
         ScopeSnapshotPointBudget: 8000,
-        RobustDetection: robustDetection);
+        PllEventVeto: pllEventVeto);
 
     [Fact]
-    public void RobustDetectionOff_WiresTheOriginalPipeline()
+    public void Default_WiresFloorAndGuardWithoutTheVeto()
     {
-        AnalysisWorker.Config config = NewSettings(robustDetection: false)
+        AnalysisWorker.Config config = NewSettings(pllEventVeto: false)
             .ToWorkerConfig(sessionId: 1, sampleWriter: null);
 
-        Assert.Null(config.DetectorOptions);
+        Assert.NotNull(config.DetectorOptions);
+        Assert.True(config.DetectorOptions!.EnableAdaptiveFloor);
+        Assert.True(config.DetectorOptions.EnableRegimeGuard);
         Assert.Null(config.EventGate);
     }
 
     [Fact]
-    public void RobustDetectionOn_WiresTheMeasuredRobustPreset()
+    public void PllEventVetoOn_AddsTheGateOnTopOfFloorAndGuard()
     {
-        AnalysisWorker.Config config = NewSettings(robustDetection: true)
+        AnalysisWorker.Config config = NewSettings(pllEventVeto: true)
             .ToWorkerConfig(sessionId: 1, sampleWriter: null);
 
         Assert.NotNull(config.DetectorOptions);

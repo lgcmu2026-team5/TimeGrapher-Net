@@ -409,7 +409,7 @@ public partial class MainWindow : Window
             SoundImageWidth: EffectivePixelWidth(SoundImageControl(), DEFAULT_SOUND_IMAGE_WIDTH),
             SoundImageHeight: EffectivePixelHeight(SoundImageControl(), DEFAULT_SOUND_IMAGE_HEIGHT),
             ScopeSnapshotPointBudget: InfoTabCatalog.ScopeTargetPointBudget,
-            RobustDetection: mViewModel.RobustDetection);
+            PllEventVeto: mViewModel.PllEventVeto);
     }
 
     private Control SoundImageControl()

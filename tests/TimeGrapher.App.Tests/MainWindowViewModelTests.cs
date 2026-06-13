@@ -139,7 +139,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("200", vm.HighPassCutoffText);
         Assert.Equal(2m, vm.ScopeScale);
         Assert.False(vm.UseCOnset);
-        Assert.False(vm.RobustDetection);
+        Assert.False(vm.PllEventVeto);
     }
 
     [Fact]

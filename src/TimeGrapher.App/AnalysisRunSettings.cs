@@ -17,7 +17,7 @@ internal sealed record AnalysisRunSettings(
     int SoundImageWidth,
     int SoundImageHeight,
     int ScopeSnapshotPointBudget,
-    bool RobustDetection)
+    bool PllEventVeto)
 {
     public AnalysisWorker.Config ToWorkerConfig(ulong sessionId, ISampleWriter? sampleWriter)
     {
@@ -31,10 +31,14 @@ internal sealed record AnalysisRunSettings(
             AutoBph = AutoBph,
             ManualBph = ManualBph,
             HpfCutoffHz = HpfCutoffHz,
-            // Robust preset: the same composition the verifier's robust
-            // profile froze by A/B measurement (floor + guard + PLL veto).
-            DetectorOptions = RobustDetection ? TgDetectorOptions.Robust() : null,
-            EventGate = RobustDetection ? new PllMatchGate() : null,
+            // Adaptive floor + regime guard are on by default: the adverse
+            // A/B measured no regression from them on any row, and the
+            // original-source fidelity constraint was dropped by the owner.
+            // The PLL event veto stays opt-in because it regresses recall
+            // under extreme sustained noise (noisy-1 row) even though it
+            // sharply raises precision on weak/impulsive rows.
+            DetectorOptions = TgDetectorOptions.Robust(),
+            EventGate = PllEventVeto ? new PllMatchGate() : null,
             SoundImageWidth = SoundImageWidth,
             SoundImageHeight = SoundImageHeight,
             ScopeSnapshotPointBudget = ScopeSnapshotPointBudget,

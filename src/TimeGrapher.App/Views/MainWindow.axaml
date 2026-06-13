@@ -352,11 +352,11 @@
                           FontWeight="Bold" Content="C Event Use Onset Amplitude"
                           IsChecked="{Binding UseCOnset, Mode=TwoWay}" />
 
-                <CheckBox Name="RobustDetectionCheckBox" Grid.Row="3" Grid.ColumnSpan="2"
+                <CheckBox Name="PllEventVetoCheckBox" Grid.Row="3" Grid.ColumnSpan="2"
                           HorizontalAlignment="Right"
                           IsEnabled="{Binding AreRunParametersEnabled}"
-                          FontWeight="Bold" Content="Robust Detection (weak/noisy)"
-                          IsChecked="{Binding RobustDetection, Mode=TwoWay}" />
+                          FontWeight="Bold" Content="PLL Event Veto (impulse rejection)"
+                          IsChecked="{Binding PllEventVeto, Mode=TwoWay}" />
               </Grid>
             </StackPanel>
           </Border>

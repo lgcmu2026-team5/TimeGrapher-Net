@@ -385,7 +385,7 @@ BeatSegmentsSnapshot "1" *-- "1" BeatNoiseAverageSnapshot : scope 2 lane state
 | Entity | Source in project | Meaning |
 |---|---|---|
 | `WavFile`, `WavFormatInfo`, `WavData` | `Core.AudioIo` | Persisted or decoded audio data used for playback, recording, and verification |
-| `AnalysisRunSettings` | `TimeGrapher.App` | User-selected run parameters converted into `AnalysisWorker.Config`: sample rate, lift angle, averaging period, C-onset mode, BPH mode, HPF cutoff, sound-print image dimensions, scope snapshot point budget, and the robust-detection preset flag (expanded into `TgDetectorOptions.Robust()` + `PllMatchGate` when set) |
+| `AnalysisRunSettings` | `TimeGrapher.App` | User-selected run parameters converted into `AnalysisWorker.Config`: sample rate, lift angle, averaging period, C-onset mode, BPH mode, HPF cutoff, sound-print image dimensions, scope snapshot point budget, and the PLL-event-veto flag. GUI runs always apply `TgDetectorOptions.Robust()` (adaptive floor + regime guard, measured regression-free); the veto flag additionally wires `PllMatchGate` |
 | `TgDetectorOptions`, `BeatCandidate`, `BeatEventGateConfig` | `Core.Detection`, `Core.Detection.Scoring`, `Core.Analysis` | Opt-in robustness knobs (all defaults off = bit-identical port), the candidate-event context handed to an `IBeatEventGate` (event, sync state, thresholds, PLL match verdict captured at emission time), and the engine-level gate configuration carrier |
 | `AudioSource` specializations | App run modes and Core workers | Live microphone, WAV playback, or synthetic signal input |
 | `MasterAudioBuffer` | `Core.Shared` | Shared mono float ring buffer between input workers and analysis, with input throughput counters and capture timestamp lookup for latency reporting |
