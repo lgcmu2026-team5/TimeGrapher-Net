@@ -515,7 +515,7 @@ internal sealed class InfoTabRegistry
         AddTableRow("Rate (s/d)", rateCells, 1);
         AddTableRow("Amplitude (°)", amplitudeCells, 2);
 
-        // --- Legend (roles first; colour is a secondary cue) ---
+        // --- Legend (colour words match the gauge markers) ---
         var legend = new TextBlock
         {
             FontSize = 12,
@@ -527,13 +527,14 @@ internal sealed class InfoTabRegistry
         Run Swatch(string text, Color color) => new(text) { Foreground = new SolidColorBrush(color), FontWeight = FontWeight.Bold };
         legend.Inlines = new InlineCollection
         {
-            new Run("Band = acceptable range     "),
-            Swatch("Min/Max", Color.FromRgb(0x2D, 0x7D, 0xD2)),
-            new Run(" = paired limit lines     "),
-            Swatch("Avg", Color.FromRgb(0xC0, 0x39, 0x2B)),
-            new Run(" = center line     "),
-            Swatch("Now", Color.FromRgb(0x20, 0x20, 0x20)),
-            new Run(" = current line"),
+            Swatch("Green band", Color.FromRgb(0x4C, 0xAF, 0x50)),
+            new Run(" = acceptable range     "),
+            Swatch("Blue", Color.FromRgb(0x2D, 0x7D, 0xD2)),
+            new Run(" = measured min/max     "),
+            Swatch("Red", Color.FromRgb(0xC0, 0x39, 0x2B)),
+            new Run(" = average     "),
+            Swatch("Black", Color.FromRgb(0x20, 0x20, 0x20)),
+            new Run(" = current"),
         };
 
         var grid = new Grid
