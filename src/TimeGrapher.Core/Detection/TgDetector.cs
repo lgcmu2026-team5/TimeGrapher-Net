@@ -548,7 +548,12 @@ public sealed class TgDetector
 
         /* Detector state for diagnostics */
         {
-            _det.GetThresholds(out double onsetThr, out double minPeakThr,
+            /* The UI threshold is a scalar diagnostic; the post-lock phase
+             * veto is represented by accepted event markers. When the phase
+             * guide is active, expose the guided amplitude threshold. */
+            bool phaseGuidedDiagnostic = result.SyncStatus == TgSyncStatus.Synced &&
+                                          _det.PhaseGuideEnabled != 0;
+            _det.GetThresholds(phaseGuidedDiagnostic, out double onsetThr, out double minPeakThr,
                                out double effNoise, out double refPeak);
             result.OnsetThreshold = (float)onsetThr;
             result.MinPeakThreshold = (float)minPeakThr;

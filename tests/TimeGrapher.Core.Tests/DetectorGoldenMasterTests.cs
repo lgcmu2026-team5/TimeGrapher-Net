@@ -163,12 +163,12 @@ public sealed class DetectorGoldenMasterTests
                 (TgEventType.A, 162404, 0.042399546756920974),
                 (TgEventType.C, 162892, 0.31676012239867013),
             },
-            onsetThr: 0.008158111f,
-            minPeakThr: 0.0543874f,
+            onsetThr: 0.02447433f,
+            minPeakThr: 0.029913071f,
             noiseFloor: 1E-09f,
             refPeak: 0.271937f,
-            flushOnsetThr: 0.008158111f,
-            flushMinPeakThr: 0.0543874f,
+            flushOnsetThr: 0.02447433f,
+            flushMinPeakThr: 0.029913071f,
             flushNoiseFloor: 1E-09f,
             flushRefPeak: 0.271937f);
     }
@@ -222,12 +222,12 @@ public sealed class DetectorGoldenMasterTests
                 (TgEventType.A, 162407, -0.3246108476985493),
                 (TgEventType.C, 162892, 0.32424573435749704),
             },
-            onsetThr: 0.011252444f,
-            minPeakThr: 0.047976665f,
+            onsetThr: 0.024213934f,
+            minPeakThr: 0.028534431f,
             noiseFloor: 0.0047716987f,
             refPeak: 0.22079654f,
-            flushOnsetThr: 0.01112763f,
-            flushMinPeakThr: 0.047873728f,
+            flushOnsetThr: 0.024096841f,
+            flushMinPeakThr: 0.028419912f,
             flushNoiseFloor: 0.004643025f,
             flushRefPeak: 0.22079654f);
     }

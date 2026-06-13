@@ -750,8 +750,12 @@ internal sealed class TgDetectorCore
     // tg_detector_get_thresholds
     public void GetThresholds(out double onsetThr, out double minPeakThr,
                               out double effNoise, out double refPeak)
+        => GetThresholds(phaseGuided: false, out onsetThr, out minPeakThr, out effNoise, out refPeak);
+
+    public void GetThresholds(bool phaseGuided, out double onsetThr, out double minPeakThr,
+                              out double effNoise, out double refPeak)
     {
-        ComputeThresholds(TotalSamples, out effNoise, out refPeak, out _, out onsetThr, out minPeakThr);
+        ComputeThresholds(TotalSamples, phaseGuided, out effNoise, out refPeak, out _, out onsetThr, out minPeakThr);
     }
 
     // clamp_fraction
