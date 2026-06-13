@@ -1247,6 +1247,13 @@ internal sealed class InfoTabRegistry
             Stretch = Stretch.Fill,
         };
 
+        // Themed backdrop behind the image so the graph area reads as the scope
+        // background (white light / black dark) even before the first run paints
+        // an image — otherwise the null-source Image shows the window color and
+        // the graph area is invisible. It also matches the spectrogram dB floor.
+        var imageHost = new Border { Child = image };
+        imageHost.Bind(Border.BackgroundProperty, imageHost.GetResourceObservable("ScopeBgBrush"));
+
         TextBlock Label(string text) => new()
         {
             Text = text,
@@ -1295,12 +1302,12 @@ internal sealed class InfoTabRegistry
         };
         Grid.SetRow(axisGrid, 0);
         Grid.SetColumn(axisGrid, 0);
-        Grid.SetRow(image, 0);
-        Grid.SetColumn(image, 1);
+        Grid.SetRow(imageHost, 0);
+        Grid.SetColumn(imageHost, 1);
         Grid.SetRow(legendRow, 1);
         Grid.SetColumn(legendRow, 1);
         grid.Children.Add(axisGrid);
-        grid.Children.Add(image);
+        grid.Children.Add(imageHost);
         grid.Children.Add(legendRow);
 
         var renderer = new SpectrogramRenderer(image, legendImage);

@@ -30,6 +30,7 @@
 
           <SolidColorBrush x:Key="SurfaceBgBrush" Color="{DynamicResource SurfaceColor}" />
           <SolidColorBrush x:Key="PanelBgBrush" Color="{DynamicResource PanelColor}" />
+          <SolidColorBrush x:Key="ScopeBgBrush" Color="{DynamicResource ScopeBgColor}" />
           <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource TextPrimaryColor}" />
           <SolidColorBrush x:Key="ChromeBorderBrush" Color="{DynamicResource ChromeBorderColor}" />
           <SolidColorBrush x:Key="ChromeAccentBrush" Color="{DynamicResource ChromeAccentColor}" />
@@ -54,6 +55,7 @@
 
           <SolidColorBrush x:Key="SurfaceBgBrush" Color="{DynamicResource SurfaceColor}" />
           <SolidColorBrush x:Key="PanelBgBrush" Color="{DynamicResource PanelColor}" />
+          <SolidColorBrush x:Key="ScopeBgBrush" Color="{DynamicResource ScopeBgColor}" />
           <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource TextPrimaryColor}" />
           <SolidColorBrush x:Key="ChromeBorderBrush" Color="{DynamicResource ChromeBorderColor}" />
           <SolidColorBrush x:Key="ChromeAccentBrush" Color="{DynamicResource ChromeAccentColor}" />
