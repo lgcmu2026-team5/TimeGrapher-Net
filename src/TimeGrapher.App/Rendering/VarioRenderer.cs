@@ -21,10 +21,11 @@ internal sealed record VarioTableControls(
 
 /// <summary>
 /// Vario display: per-position stability of rate and amplitude. Each gauge shows
-/// the acceptable band (green), the measured min–max range (blue span) with its
-/// bounds, the average (red line) and the current reading (black line); short
-/// role labels are placed by <see cref="VarioGaugeLayout"/> so they never overlap
-/// or clip. A SUMMARY bar carries the colour-coded verdicts, sublines and elapsed;
+/// the acceptable band (green), the measured min and max (blue lines), the
+/// average (red line) and the current reading (black line) — opaque lines so they
+/// stay legible over the band rather than blending a translucent fill into it;
+/// short role labels are placed by <see cref="VarioGaugeLayout"/> so they never
+/// overlap or clip. A SUMMARY bar carries the colour-coded verdicts, sublines and elapsed;
 /// the table holds the exact numbers. Gauges are non-interactive (no Vario zoom
 /// requirement; QAS-5 wants the readings legible without scroll/zoom), so their
 /// X-window stays locked to the derived range.
@@ -43,7 +44,6 @@ internal sealed class VarioRenderer
     private const uint AvgRed = 0xFFC0392B;
     private const uint AcceptGreen = 0xFF4CAF50;
     private const byte AcceptBandAlpha = 56;
-    private const byte RangeFillAlpha = 38;
 
     // Y layout inside each gauge: bands fill the plot; labels sit in the headroom.
     private const double YMax = 1.18;
@@ -64,7 +64,8 @@ internal sealed class VarioRenderer
         public required string RangeFormat { get; init; }
 
         public HorizontalSpan? AcceptBand;
-        public HorizontalSpan? RangeSpan;
+        public LinePlot? MinLine;
+        public LinePlot? MaxLine;
         public LinePlot? AvgLine;
         public LinePlot? NowLine;
         public readonly List<Text> Labels = new(LabelPoolSize);
@@ -149,8 +150,8 @@ internal sealed class VarioRenderer
             plot.Grid.YAxisStyle.IsVisible = false;
 
             gauge.AcceptBand = plot.Add.HorizontalSpan(gauge.AcceptMin, gauge.AcceptMax);
-            gauge.RangeSpan = plot.Add.HorizontalSpan(0.0, 0.0);
-            gauge.RangeSpan.IsVisible = false;
+            gauge.MinLine = AddLine(plot, 3);
+            gauge.MaxLine = AddLine(plot, 3);
             gauge.AvgLine = AddLine(plot, 3);
             gauge.NowLine = AddLine(plot, 2);
             for (int i = 0; i < LabelPoolSize; i++)
@@ -219,16 +220,8 @@ internal sealed class VarioRenderer
         plot.Axes.SetLimitsX(lo, hi);
         plot.Axes.SetLimitsY(0.0, YMax);
 
-        if (gauge.RangeSpan != null)
-        {
-            gauge.RangeSpan.IsVisible = stats.Valid;
-            if (stats.Valid)
-            {
-                gauge.RangeSpan.X1 = stats.Min;
-                gauge.RangeSpan.X2 = stats.Max;
-            }
-        }
-
+        PositionLine(gauge.MinLine, min);
+        PositionLine(gauge.MaxLine, max);
         PositionLine(gauge.AvgLine, avg);
         PositionLine(gauge.NowLine, current);
         PlaceLabels(gauge, lo, hi, min, max, avg, current);
@@ -375,10 +368,14 @@ internal sealed class VarioRenderer
             gauge.AcceptBand.LineStyle.Color = Color.FromARGB(AcceptGreen).WithAlpha((byte)(AcceptBandAlpha * 2));
         }
 
-        if (gauge.RangeSpan != null)
+        if (gauge.MinLine != null)
         {
-            gauge.RangeSpan.FillStyle.Color = Color.FromARGB(MinMaxBlue).WithAlpha(RangeFillAlpha);
-            gauge.RangeSpan.LineStyle.Color = Color.FromARGB(MinMaxBlue);
+            gauge.MinLine.LineColor = Color.FromARGB(MinMaxBlue);
+        }
+
+        if (gauge.MaxLine != null)
+        {
+            gauge.MaxLine.LineColor = Color.FromARGB(MinMaxBlue);
         }
 
         if (gauge.AvgLine != null)
