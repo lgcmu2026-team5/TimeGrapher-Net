@@ -279,6 +279,20 @@ public sealed class TgDetector
             int worst = (2 * numSamples) / window + 4;
             EnsureRawEvents(worst);
             int got = 0;
+            if (_sync.Synced != 0 && _currentBeatPeriod > 0.0)
+            {
+                double tol = _currentBeatPeriod * _cfg.SyncTolerancePct * 0.01;
+                double guideWindow = 1.5 * tol;
+                double minWindow = 0.006;
+                if (guideWindow < minWindow) guideWindow = minWindow;
+                double maxWindow = 0.12 * _currentBeatPeriod;
+                if (guideWindow > maxWindow) guideWindow = maxWindow;
+                _det.SetPhaseGuide(_sync.NextATime, _currentBeatPeriod, _sync.AcOffset, guideWindow);
+            }
+            else
+            {
+                _det.ClearPhaseGuide();
+            }
             _det.Process(_bufEnv, numSamples, _rawEvents, ref got, _rawEventsCapacity);
             rawCount = got;
         }

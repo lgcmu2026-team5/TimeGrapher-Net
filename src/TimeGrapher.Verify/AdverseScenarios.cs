@@ -101,7 +101,7 @@ internal static class AdverseScenarios
         new("quiet-step", Bph: 21600, SampleRate: 48000, Seconds: 16,
             PcmPeak: 0.60, NoisePeak: 0.01, Realistic: false,
             GainStepAtS: 6.0, GainStepFactor: 0.13, EvalStartS: 10.0,
-            Default: new AdverseGates(MustSync: true, MinRecall: 0.50)),
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.95, MinPrecision: 0.95)),
         // Bootstrap behind a silent lead-in (W-2/W-13 bootstrap paths). A
         // silence-collapsed noise floor may still trip the regime detector,
         // but pre-lock trips must not flush the BPH acquisition history.

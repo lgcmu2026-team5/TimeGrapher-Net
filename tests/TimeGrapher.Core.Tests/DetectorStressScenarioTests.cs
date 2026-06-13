@@ -18,13 +18,18 @@ namespace TimeGrapher.Core.Tests;
 /// </summary>
 public sealed class DetectorStressScenarioTests
 {
-    private sealed record StressResult(TgSyncStatus FinalSync, int DetectedBph, int Resets);
+    private sealed record StressResult(
+        TgSyncStatus FinalSync,
+        int DetectedBph,
+        int Resets,
+        DetectionScorer.Score Score);
 
     private static StressResult Run(
         double pcmPeak, double noisePeak, int bph, int seconds,
         double impulseRate = 0.0, double impulseAmp = 0.0,
         double gainStepAtS = 0.0, double gainStepFactor = 1.0,
-        int silenceLeadInSamples = 0)
+        int silenceLeadInSamples = 0,
+        double evalStartS = 2.0)
     {
         WatchSynthStreamConfig cfg = WatchSynthStreamConfig.Clean();
         cfg.SampleRateHz = 48000;
@@ -49,6 +54,10 @@ public sealed class DetectorStressScenarioTests
 
         int resets = 0;
         var block = new float[4096];
+        var eventBuf = new WatchSynthStreamEvent[64];
+        double leadInS = (double)silenceLeadInSamples / 48000;
+        var truthTimes = new List<double>();
+        var detectedATimes = new List<double>();
         DetectorMetricsBlockUpdate update = default!;
 
         while (silenceLeadInSamples > 0)
@@ -56,10 +65,7 @@ public sealed class DetectorStressScenarioTests
             int slice = Math.Min(block.Length, silenceLeadInSamples);
             Array.Clear(block, 0, slice);
             update = engine.Process(block.AsSpan(0, slice));
-            if (update.Result.DetectorResetEvent)
-            {
-                resets++;
-            }
+            Collect(update, detectedATimes, ref resets);
             silenceLeadInSamples -= slice;
         }
 
@@ -70,7 +76,11 @@ public sealed class DetectorStressScenarioTests
         {
             int slice = (int)Math.Min(block.Length, total - done);
             Span<float> span = block.AsSpan(0, slice);
-            synth.Generate(span);
+            WatchSynthStreamFillResult fill = synth.FillF32(span, eventBuf);
+            for (int i = 0; i < fill.EventsWritten; i++)
+            {
+                truthTimes.Add(leadInS + eventBuf[i].TimeS);
+            }
             for (int i = 0; i < slice; i++)
             {
                 if (done + i >= stepAt)
@@ -79,18 +89,30 @@ public sealed class DetectorStressScenarioTests
                 }
             }
             update = engine.Process(span);
-            if (update.Result.DetectorResetEvent)
-            {
-                resets++;
-            }
+            Collect(update, detectedATimes, ref resets);
             done += slice;
         }
         update = engine.Flush();
+        Collect(update, detectedATimes, ref resets);
+        DetectionScorer.Score score = DetectionScorer.Match(
+            truthTimes.ToArray(), detectedATimes.ToArray(),
+            toleranceS: 0.005, evalStartS: leadInS + evalStartS);
+        return new StressResult(update.Result.SyncStatus, update.Result.DetectedBph, resets, score);
+    }
+
+    private static void Collect(DetectorMetricsBlockUpdate update, List<double> detectedATimes, ref int resets)
+    {
         if (update.Result.DetectorResetEvent)
         {
             resets++;
         }
-        return new StressResult(update.Result.SyncStatus, update.Result.DetectedBph, resets);
+        foreach (DetectedEventUpdate ev in update.MetricsEvents)
+        {
+            if (ev.Event.Type == TgEventType.A)
+            {
+                detectedATimes.Add(ev.EventSample / 48000);
+            }
+        }
     }
 
     [Fact]
@@ -108,10 +130,13 @@ public sealed class DetectorStressScenarioTests
     public void QuietStep_DefaultDetectorReacquires()
     {
         StressResult result = Run(pcmPeak: 0.60, noisePeak: 0.01,
-            bph: 21600, seconds: 16, gainStepAtS: 6.0, gainStepFactor: 0.13);
+            bph: 21600, seconds: 16, gainStepAtS: 6.0, gainStepFactor: 0.13,
+            evalStartS: 10.0);
 
         Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
         Assert.Equal(21600, result.DetectedBph);
+        Assert.True(result.Score.Recall >= 0.95, $"recall {result.Score.Recall:F3}");
+        Assert.True(result.Score.Precision >= 0.95, $"precision {result.Score.Precision:F3}");
     }
 
     [Fact]

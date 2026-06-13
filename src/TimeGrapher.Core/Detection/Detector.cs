@@ -58,6 +58,17 @@ internal sealed class TgDetectorCore
     public double OnsetFraction;
     public double MinPeakFraction;
 
+    /* Lock-aware sensitivity guide. The owning TgDetector enables this only
+     * after BPH/PLL lock, so pre-lock acquisition still uses the conservative
+     * global thresholds. */
+    public int PhaseGuideEnabled;
+    public double PhaseGuideNextATime;
+    public double PhaseGuideBeatPeriod;
+    public double PhaseGuideAcOffset;
+    public double PhaseGuideWindowS;
+    public double PhaseGuideOnsetScale;
+    public double PhaseGuideMinPeakScale;
+
     /* V4.5: minimum wall-clock A-to-A interval. */
     public ulong MinAIntervalSamples;
     public ulong SamplesSinceLastA;   // wall-clock counter
@@ -129,6 +140,7 @@ internal sealed class TgDetectorCore
     public double BurstMaxYMinus1;
     public double BurstMaxYPlus1;
     public int HavePeakPlus1;
+    public int BurstPhaseGuided;
 
     /* V5.2: separate C-peak tracking. */
     public ulong CSearchSkipSamples;
@@ -166,6 +178,7 @@ internal sealed class TgDetectorCore
         BurstMaxYMinus1 = 0.0;
         BurstMaxYPlus1 = 0.0;
         HavePeakPlus1 = 0;
+        BurstPhaseGuided = 0;
         /* V5.2 */
         CHavePeak = 0;
         BurstCMax = 0.0;
@@ -175,6 +188,7 @@ internal sealed class TgDetectorCore
         CHavePeakPlus1 = 0;
         PrevSample = 0.0;
         TotalSamples = 0;
+        ClearPhaseGuide();
         /* Start with a large virtual silence credit so the first real tick
          * isn't blocked by the silence gate. */
         SilenceSamples = 1UL << 30;
@@ -244,6 +258,13 @@ internal sealed class TgDetectorCore
         /* Default gate fractions. */
         OnsetFraction = 0.03;
         MinPeakFraction = 0.20;
+        PhaseGuideEnabled = 0;
+        PhaseGuideNextATime = 0.0;
+        PhaseGuideBeatPeriod = 0.0;
+        PhaseGuideAcOffset = 0.0;
+        PhaseGuideWindowS = 0.0;
+        PhaseGuideOnsetScale = 1.0;
+        PhaseGuideMinPeakScale = 0.55;
 
         /* V4.5: A-to-A interval gate disabled at init / pre-sync. */
         MinAIntervalSamples = 0;
@@ -310,6 +331,30 @@ internal sealed class TgDetectorCore
         }
     }
 
+    public void SetPhaseGuide(double nextATime, double beatPeriod, double acOffset, double windowS)
+    {
+        if (beatPeriod <= 0.0 || windowS <= 0.0)
+        {
+            ClearPhaseGuide();
+            return;
+        }
+
+        PhaseGuideEnabled = 1;
+        PhaseGuideNextATime = nextATime;
+        PhaseGuideBeatPeriod = beatPeriod;
+        PhaseGuideAcOffset = acOffset < 0.0 ? -acOffset : acOffset;
+        PhaseGuideWindowS = windowS;
+    }
+
+    public void ClearPhaseGuide()
+    {
+        PhaseGuideEnabled = 0;
+        PhaseGuideNextATime = 0.0;
+        PhaseGuideBeatPeriod = 0.0;
+        PhaseGuideAcOffset = 0.0;
+        PhaseGuideWindowS = 0.0;
+    }
+
     // parabolic_offset
     private static double ParabolicOffset(double yM1, double y0, double yP1)
     {
@@ -319,6 +364,20 @@ internal sealed class TgDetectorCore
         if (off < -0.5) off = -0.5;
         if (off > 0.5) off = 0.5;
         return off;
+    }
+
+    private int PhaseGuideMatchesA(ulong absIdx)
+    {
+        if (PhaseGuideEnabled == 0) return 0;
+        double T = PhaseGuideBeatPeriod;
+        if (T <= 0.0) return 0;
+
+        double phase = ((double)absIdx / Fs) - PhaseGuideNextATime;
+        while (phase > 0.5 * T) phase -= T;
+        while (phase < -0.5 * T) phase += T;
+
+        if (Math.Abs(phase) <= PhaseGuideWindowS) return 1;
+        return 0;
     }
 
     /* V5.4: read the envelope sample at absolute index `abs` from the
@@ -658,6 +717,12 @@ internal sealed class TgDetectorCore
     private void ComputeThresholds(ulong absIdx,
                                    out double effNoise, out double refPeak,
                                    out double span, out double onsetThr, out double minPeakThr)
+        => ComputeThresholds(absIdx, phaseGuided: false,
+                             out effNoise, out refPeak, out span, out onsetThr, out minPeakThr);
+
+    private void ComputeThresholds(ulong absIdx, bool phaseGuided,
+                                   out double effNoise, out double refPeak,
+                                   out double span, out double onsetThr, out double minPeakThr)
     {
         double n = EffectiveNoise();
         double r = ReferencePeak(absIdx);
@@ -666,8 +731,15 @@ internal sealed class TgDetectorCore
         effNoise = n;
         refPeak = r;
         span = sp;
-        onsetThr = n + OnsetFraction * sp;
-        minPeakThr = n + MinPeakFraction * sp;
+        double onsetFraction = OnsetFraction;
+        double minPeakFraction = MinPeakFraction;
+        if (phaseGuided)
+        {
+            onsetFraction *= PhaseGuideOnsetScale;
+            minPeakFraction *= PhaseGuideMinPeakScale;
+        }
+        onsetThr = n + onsetFraction * sp;
+        minPeakThr = n + minPeakFraction * sp;
     }
 
     // tg_detector_get_thresholds
@@ -755,7 +827,9 @@ internal sealed class TgDetectorCore
             }
 
             /* Thresholds anchored to median of recent peak heights. */
-            ComputeThresholds(absIdx, out _, out _, out double span, out double onsetThr, out double _);
+            bool phaseGuidedSample = PhaseGuideMatchesA(absIdx) != 0;
+            ComputeThresholds(absIdx, phaseGuidedSample,
+                              out _, out _, out double span, out double onsetThr, out double _);
 
             /* Silence gate is wall-clock based. Increment silence_samples
              * every sample we're NOT in a burst, unconditionally. */
@@ -803,6 +877,7 @@ internal sealed class TgDetectorCore
                     BurstMaxIdx = absIdx;
                     BurstMaxYMinus1 = PrevSample;
                     HavePeakPlus1 = 0;
+                    BurstPhaseGuided = phaseGuidedSample ? 1 : 0;
 
                     /* V5.2: reset C-peak tracker. */
                     CHavePeak = 0;
@@ -853,7 +928,8 @@ internal sealed class TgDetectorCore
                 if (samplesSincePeak >= BurstEndSamples)
                 {
                     /* Minimum tick height: fraction of the dynamic range. */
-                    double minPeak = EffectiveNoise() + MinPeakFraction * span;
+                    ComputeThresholds(absIdx, BurstPhaseGuided != 0,
+                                      out _, out _, out _, out _, out double minPeak);
                     bool isRealTick = (BurstMax >= minPeak);
 
                     if (isRealTick)
