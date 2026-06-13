@@ -361,7 +361,7 @@ internal sealed class InfoTabRegistry
     {
         var font = new FontFamily(context.TextFontFamily);
 
-        Grid GaugeHeader(string text, string bandText)
+        Grid GaugeHeader(string text, string bandText, out Border bandBadge)
         {
             var header = new Grid
             {
@@ -375,12 +375,13 @@ internal sealed class InfoTabRegistry
                 FontWeight = FontWeight.Bold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            var bandBadge = new Border
+            bandBadge = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0x38, 0xE9, 0xC4, 0x6A)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0x9A, 0x6A, 0x00)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(4),
+                IsVisible = false,
                 Padding = new Thickness(6, 1, 6, 1),
                 Margin = new Thickness(10, 0, 0, 0),
                 Child = new TextBlock
@@ -402,39 +403,49 @@ internal sealed class InfoTabRegistry
         var amplitudePlot = new AvaPlot();
 
         // --- SUMMARY bar: verdicts and elapsed; exact numbers stay in the table ---
-        var rateStatus = new TextBlock { FontSize = 20, FontWeight = FontWeight.Bold };
-        var ampStatus = new TextBlock { FontSize = 20, FontWeight = FontWeight.Bold };
-        var elapsedValue = new TextBlock { FontSize = 22, FontWeight = FontWeight.Bold, FontFamily = font };
+        var rateStatus = new TextBlock { FontSize = 24, FontWeight = FontWeight.Bold };
+        var ampStatus = new TextBlock { FontSize = 24, FontWeight = FontWeight.Bold };
+        var elapsedValue = new TextBlock { FontSize = 24, FontWeight = FontWeight.Bold, FontFamily = font };
 
         StackPanel SummaryColumn(string caption, TextBlock status)
         {
-            var sp = new StackPanel { Margin = new Thickness(12, 4, 12, 4) };
-            sp.Children.Add(new TextBlock { Text = caption, FontSize = 11, Opacity = 0.68, FontWeight = FontWeight.SemiBold });
+            var sp = new StackPanel { Margin = new Thickness(12, 0, 12, 2) };
+            sp.Children.Add(new TextBlock { Text = caption, FontSize = 12, Opacity = 0.9, FontWeight = FontWeight.SemiBold });
             sp.Children.Add(status);
             return sp;
         }
 
-        var elapsedColumn = new StackPanel { Margin = new Thickness(12, 4, 12, 4) };
-        elapsedColumn.Children.Add(new TextBlock { Text = "ELAPSED", FontSize = 11, Opacity = 0.68, FontWeight = FontWeight.SemiBold });
+        var elapsedColumn = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(12, 0, 12, 2),
+        };
+        elapsedColumn.Children.Add(new TextBlock { Text = "ELAPSED", FontSize = 12, Opacity = 0.9, FontWeight = FontWeight.SemiBold });
         elapsedColumn.Children.Add(elapsedValue);
 
         var criteriaButton = new Button
         {
-            Content = "Criteria ▾",
-            FontSize = 11,
-            Padding = new Thickness(8, 2, 8, 2),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(4, 0, 8, 0),
-            Flyout = new Flyout { Content = BuildVarioCriteria() },
+            Content = "View criteria ▾",
+            FontSize = 12,
+            MinWidth = 144,
+            MinHeight = 30,
+            Padding = new Thickness(12, 4, 12, 4),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(12, 4, 8, 0),
+            Flyout = new Flyout
+            {
+                Placement = PlacementMode.BottomEdgeAlignedRight,
+                Content = BuildVarioCriteria(),
+            },
         };
 
-        var summaryColumns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,Auto,Auto") };
+        var summaryColumns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,160") };
         Control[] summaryCells =
         {
             SummaryColumn("RATE", rateStatus),
             SummaryColumn("AMPLITUDE", ampStatus),
             elapsedColumn,
-            criteriaButton,
         };
         for (int c = 0; c < summaryCells.Length; c++)
         {
@@ -444,27 +455,33 @@ internal sealed class InfoTabRegistry
 
         var overallText = new TextBlock
         {
-            FontSize = 13,
+            FontSize = 14,
             FontWeight = FontWeight.Bold,
             TextWrapping = TextWrapping.Wrap,
-            MinHeight = 24,
-            Margin = new Thickness(12, 6, 12, 0),
+            MinHeight = 22,
+            Margin = new Thickness(12, 5, 12, 0),
             Text = " ",
         };
 
+        var summaryTopBar = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        Grid.SetColumn(overallText, 0);
+        Grid.SetColumn(criteriaButton, 1);
+        summaryTopBar.Children.Add(overallText);
+        summaryTopBar.Children.Add(criteriaButton);
+
         var summaryStack = new StackPanel();
-        summaryStack.Children.Add(overallText);
+        summaryStack.Children.Add(summaryTopBar);
         summaryStack.Children.Add(summaryColumns);
         var summaryCard = new Border
         {
             Child = summaryStack,
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0xC9, 0xC9, 0xC9)),
-            Background = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0xFF, 0xFF)),
-            Margin = new Thickness(16, 8, 16, 4),
-            Padding = new Thickness(0, 0, 0, 6),
+            Margin = new Thickness(16, 6, 16, 3),
+            Padding = new Thickness(0, 0, 0, 4),
         };
+        summaryCard.Bind(Border.BackgroundProperty, summaryCard.GetResourceObservable("PanelBgBrush"));
+        summaryCard.Bind(Border.BorderBrushProperty, summaryCard.GetResourceObservable("ChromeBorderBrush"));
 
         // --- Numeric table: exact numbers live here; gauges show position only ---
         string[] columnHeaders = { "Min", "Max", "Spread (Max−Min)", "Average", "Std dev (σ)", "Current" };
@@ -540,23 +557,28 @@ internal sealed class InfoTabRegistry
         var legend = new TextBlock
         {
             FontSize = 12,
-            Opacity = 0.95,
+            Opacity = 1.0,
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(16, 0, 16, 6),
             TextWrapping = TextWrapping.Wrap,
         };
         Run Swatch(string text, Color color) => new(text) { Foreground = new SolidColorBrush(color), FontWeight = FontWeight.Bold };
+        var currentSwatch = new Run("Current dashed") { FontWeight = FontWeight.Bold };
+        currentSwatch.Bind(TextElement.ForegroundProperty, currentSwatch.GetResourceObservable("TextPrimaryBrush"));
         legend.Inlines = new InlineCollection
         {
             Swatch("Amber band", Color.FromRgb(0x9A, 0x6A, 0x00)),
-            new Run(" = acceptable range     "),
+            new Run(" = acceptable band     "),
             Swatch("Blue solid", Color.FromRgb(0x2D, 0x7D, 0xD2)),
             new Run(" = measured min/max     "),
             Swatch("Red solid", Color.FromRgb(0xC0, 0x39, 0x2B)),
             new Run(" = average     "),
-            Swatch("Black dashed", Color.FromRgb(0x20, 0x20, 0x20)),
+            currentSwatch,
             new Run(" = current"),
         };
+
+        Grid rateHeader = GaugeHeader("RATE (s/d)", "Acceptable band -10 to +10 s/d", out Border rateBandBadge);
+        Grid amplitudeHeader = GaugeHeader("AMPLITUDE (°)", "Acceptable band 270 to 300°", out Border amplitudeBandBadge);
 
         var grid = new Grid
         {
@@ -565,8 +587,8 @@ internal sealed class InfoTabRegistry
         Control[] rows =
         {
             summaryCard,
-            GaugeHeader("RATE (s/d)", "Accept band -10 to +10 s/d"), ratePlot,
-            GaugeHeader("AMPLITUDE (°)", "Accept band 270 to 300°"), amplitudePlot,
+            rateHeader, ratePlot,
+            amplitudeHeader, amplitudePlot,
             table, legend,
         };
         for (int i = 0; i < rows.Length; i++)
@@ -584,7 +606,8 @@ internal sealed class InfoTabRegistry
         var summary = new VarioSummaryControls(
             rateStatus, ampStatus, elapsedValue, overallText);
         var renderer = new VarioRenderer(
-            ratePlot, amplitudePlot, summary, new VarioTableControls(rateCells, amplitudeCells), context.TextFontFamily);
+            ratePlot, amplitudePlot, summary, new VarioBandBadgeControls(rateBandBadge, amplitudeBandBadge),
+            new VarioTableControls(rateCells, amplitudeCells), context.TextFontFamily);
         var consumer = new VarioFrameConsumer(renderer);
         return new InfoTabRegistration(definition, CreateTabItem(definition, grid), consumer);
     }
@@ -612,11 +635,11 @@ internal sealed class InfoTabRegistry
             FontSize = 12,
             Foreground = new SolidColorBrush(c),
             Margin = new Thickness(0, 1, 0, 1),
-            MaxWidth = 340,
+            MaxWidth = 320,
             TextWrapping = TextWrapping.Wrap,
         };
 
-        var panel = new StackPanel { Margin = new Thickness(12), MaxWidth = 360 };
+        var panel = new StackPanel { Margin = new Thickness(12), Width = 360, MaxWidth = 360 };
         panel.Children.Add(new TextBlock { Text = "Assessment criteria", FontWeight = FontWeight.Bold, FontSize = 14 });
         panel.Children.Add(new TextBlock
         {
@@ -624,17 +647,17 @@ internal sealed class InfoTabRegistry
             FontSize = 11,
             Opacity = 0.7,
             TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 340,
+            MaxWidth = 320,
             Margin = new Thickness(0, 2, 0, 0),
         });
         panel.Children.Add(Title("Rate (s/d)"));
-        panel.Children.Add(Rule($"OK: stable in range, average within ±{band:0} s/d and σ ≤ {sigma:0}", Good));
-        panel.Children.Add(Rule($"Watch: in range but unstable, σ > {sigma:0}", Warn));
-        panel.Children.Add(Rule($"Alert: fast or slow, average beyond ±{band:0} s/d", Bad));
+        panel.Children.Add(Rule($"Stable · in range: average within ±{band:0} s/d and σ ≤ {sigma:0}", Good));
+        panel.Children.Add(Rule($"In range · unstable: average within ±{band:0} s/d but σ > {sigma:0}", Warn));
+        panel.Children.Add(Rule($"Fast / Slow · out of range: average beyond ±{band:0} s/d", Bad));
         panel.Children.Add(Title("Amplitude (°)"));
-        panel.Children.Add(Rule($"OK: healthy, average {ampMin:0}–{ampMax:0}°", Good));
-        panel.Children.Add(Rule($"Watch: slightly low/high, {service:0}–{ampMin:0}° or above {ampMax:0}°", Warn));
-        panel.Children.Add(Rule($"Alert: low service range, average below {service:0}°", Bad));
+        panel.Children.Add(Rule($"Healthy: average {ampMin:0}–{ampMax:0}°", Good));
+        panel.Children.Add(Rule($"Slightly low / High: average {service:0}–{ampMin:0}° or above {ampMax:0}°", Warn));
+        panel.Children.Add(Rule($"Low · service: average below {service:0}°", Bad));
         return panel;
     }
 

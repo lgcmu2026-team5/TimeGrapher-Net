@@ -13,6 +13,8 @@ internal sealed record VarioSummaryControls(
     TextBlock Elapsed,
     TextBlock OverallText);
 
+internal sealed record VarioBandBadgeControls(Control Rate, Control Amplitude);
+
 /// <summary>Numeric table cells (Min, Max, Spread, Average, Sigma, Current) per measure.</summary>
 internal sealed record VarioTableControls(
     IReadOnlyList<TextBlock> RateCells,
@@ -41,6 +43,7 @@ internal sealed class VarioRenderer
 
     private const uint MinMaxBlue = 0xFF2D7DD2;
     private const uint AvgRed = 0xFFC0392B;
+    private const uint DarkThemeAvgRed = 0xFFFF6B6B;
     private const uint AcceptBandFill = 0xFFE9C46A;
     private const uint AcceptBandEdge = 0xFF9A6A00;
     private const byte AcceptBandAlpha = 42;
@@ -55,6 +58,7 @@ internal sealed class VarioRenderer
         public required AvaPlot Plot { get; init; }
         public required IReadOnlyList<TextBlock> Cells { get; init; }
         public required TextBlock StatusText { get; init; }
+        public required Control AcceptBandBadge { get; init; }
         public required Func<StatsSummary, VarioVerdict> Assess { get; init; }
         public required double AcceptMin { get; init; }
         public required double AcceptMax { get; init; }
@@ -66,13 +70,14 @@ internal sealed class VarioRenderer
         public LinePlot? MinLine;
         public LinePlot? MaxLine;
         public LinePlot? AvgLine;
-        public LinePlot? NowLine;
+        public LinePlot? CurrentLine;
         public readonly List<Text> Labels = new(LabelPoolSize);
     }
 
     private readonly Gauge _rate;
     private readonly Gauge _amplitude;
     private readonly VarioSummaryControls _summary;
+    private readonly VarioBandBadgeControls _bandBadges;
     private readonly string _textFontFamily;
     private PlotThemePalette _theme = PlotThemePalette.Current;
     private ulong _lastVersion;
@@ -80,9 +85,11 @@ internal sealed class VarioRenderer
 
     public VarioRenderer(
         AvaPlot ratePlot, AvaPlot amplitudePlot,
-        VarioSummaryControls summary, VarioTableControls table, string textFontFamily)
+        VarioSummaryControls summary, VarioBandBadgeControls bandBadges,
+        VarioTableControls table, string textFontFamily)
     {
         _summary = summary;
+        _bandBadges = bandBadges;
         _textFontFamily = textFontFamily;
 
         _rate = new Gauge
@@ -90,6 +97,7 @@ internal sealed class VarioRenderer
             Plot = ratePlot,
             Cells = table.RateCells,
             StatusText = summary.RateStatus,
+            AcceptBandBadge = bandBadges.Rate,
             Assess = s => VarioVerdict.ForRate(s, VarioGaugePolicy.RateAcceptMinSPerDay, VarioGaugePolicy.RateAcceptMaxSPerDay),
             AcceptMin = VarioGaugePolicy.RateAcceptMinSPerDay,
             AcceptMax = VarioGaugePolicy.RateAcceptMaxSPerDay,
@@ -102,6 +110,7 @@ internal sealed class VarioRenderer
             Plot = amplitudePlot,
             Cells = table.AmplitudeCells,
             StatusText = summary.AmpStatus,
+            AcceptBandBadge = bandBadges.Amplitude,
             Assess = s => VarioVerdict.ForAmplitude(s, VarioGaugePolicy.AmplitudeAcceptMinDeg, VarioGaugePolicy.AmplitudeAcceptMaxDeg),
             AcceptMin = VarioGaugePolicy.AmplitudeAcceptMinDeg,
             AcceptMax = VarioGaugePolicy.AmplitudeAcceptMaxDeg,
@@ -123,6 +132,7 @@ internal sealed class VarioRenderer
         {
             ApplyPlotTheme(gauge.Plot.Plot);
             ApplyGaugeTheme(gauge);
+            ApplyLabelTheme(gauge);
             gauge.Plot.Refresh();
         }
     }
@@ -131,6 +141,8 @@ internal sealed class VarioRenderer
     {
         _lastVersion = 0;
         _lastCursor = null;
+        _bandBadges.Rate.IsVisible = false;
+        _bandBadges.Amplitude.IsVisible = false;
         foreach (Gauge gauge in new[] { _rate, _amplitude })
         {
             Plot plot = gauge.Plot.Plot;
@@ -153,7 +165,7 @@ internal sealed class VarioRenderer
             gauge.MinLine = AddLine(plot, 3, LinePattern.Solid);
             gauge.MaxLine = AddLine(plot, 3, LinePattern.Solid);
             gauge.AvgLine = AddLine(plot, 4, LinePattern.Solid);
-            gauge.NowLine = AddLine(plot, 2, LinePattern.Dashed);
+            gauge.CurrentLine = AddLine(plot, 2, LinePattern.Dashed);
             for (int i = 0; i < LabelPoolSize; i++)
             {
                 Text label = plot.Add.Text(string.Empty, 0.0, VarioGaugeLayout.CurrentLabelY);
@@ -220,15 +232,17 @@ internal sealed class VarioRenderer
         plot.Axes.SetLimitsX(lo, hi);
         plot.Axes.SetLimitsY(0.0, YMax);
 
+        bool showAcceptBand = VarioGaugePolicy.ShouldShowAcceptBand(stats, current);
+        gauge.AcceptBandBadge.IsVisible = showAcceptBand;
         if (gauge.AcceptBand != null)
         {
-            gauge.AcceptBand.IsVisible = VarioGaugePolicy.ShouldShowAcceptBand(stats, current);
+            gauge.AcceptBand.IsVisible = showAcceptBand;
         }
 
         PositionLine(gauge.MinLine, min);
         PositionLine(gauge.MaxLine, max);
         PositionLine(gauge.AvgLine, avg);
-        PositionLine(gauge.NowLine, current);
+        PositionLine(gauge.CurrentLine, current);
         PlaceLabels(gauge, lo, hi, min, max, avg, current);
 
         SetCells(gauge, stats, current);
@@ -311,21 +325,40 @@ internal sealed class VarioRenderer
 
     private ScottPlot.Color RoleColor(string role) => role switch
     {
-        "avg" => Color.FromARGB(AvgRed),
-        "now" => Color.FromARGB(_theme.TextPrimary),
+        "avg" => Color.FromARGB(AverageColor()),
+        "current" => Color.FromARGB(_theme.TextPrimary),
         _ => Color.FromARGB(MinMaxBlue),
     };
 
-    private static Avalonia.Media.IBrush LevelBrush(VarioVerdictLevel level) =>
+    private Avalonia.Media.IBrush LevelBrush(VarioVerdictLevel level) =>
         new Avalonia.Media.SolidColorBrush(LevelColor(level));
 
-    private static Avalonia.Media.Color LevelColor(VarioVerdictLevel level) => level switch
+    private Avalonia.Media.Color LevelColor(VarioVerdictLevel level) => level switch
     {
         VarioVerdictLevel.Good => Avalonia.Media.Color.FromRgb(0x00, 0x72, 0xB2),
         VarioVerdictLevel.Warn => Avalonia.Media.Color.FromRgb(0xB0, 0x6A, 0x00),
+        VarioVerdictLevel.Bad when IsDark(_theme.SurfaceBg) => Avalonia.Media.Color.FromRgb(0xFF, 0x6B, 0x6B),
         VarioVerdictLevel.Bad => Avalonia.Media.Color.FromRgb(0xC0, 0x30, 0x30),
         _ => Avalonia.Media.Color.FromRgb(0x80, 0x80, 0x80),
     };
+
+    private uint AverageColor() => IsDark(_theme.ScopeBg) ? DarkThemeAvgRed : AvgRed;
+
+    private static bool IsDark(uint argb)
+    {
+        double r = SrgbToLinear((argb >> 16) & 0xFF);
+        double g = SrgbToLinear((argb >> 8) & 0xFF);
+        double b = SrgbToLinear(argb & 0xFF);
+        return (0.2126 * r) + (0.7152 * g) + (0.0722 * b) < 0.18;
+    }
+
+    private static double SrgbToLinear(uint channel)
+    {
+        double value = channel / 255.0;
+        return value <= 0.04045
+            ? value / 12.92
+            : Math.Pow((value + 0.055) / 1.055, 2.4);
+    }
 
     private static void PositionLine(LinePlot? line, double? value)
     {
@@ -376,12 +409,20 @@ internal sealed class VarioRenderer
 
         if (gauge.AvgLine != null)
         {
-            gauge.AvgLine.LineColor = Color.FromARGB(AvgRed);
+            gauge.AvgLine.LineColor = Color.FromARGB(AverageColor());
         }
 
-        if (gauge.NowLine != null)
+        if (gauge.CurrentLine != null)
         {
-            gauge.NowLine.LineColor = Color.FromARGB(_theme.TextPrimary);
+            gauge.CurrentLine.LineColor = Color.FromARGB(_theme.TextPrimary);
+        }
+    }
+
+    private void ApplyLabelTheme(Gauge gauge)
+    {
+        foreach (Text label in gauge.Labels)
+        {
+            label.LabelFontColor = RoleColor(label.LabelText);
         }
     }
 
