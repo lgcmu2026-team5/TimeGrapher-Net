@@ -56,9 +56,9 @@ public sealed record DetectorResultSnapshot(
 /// Shared detector + metrics pipeline used by the live worker and the headless
 /// verifier so their event/metric contracts cannot drift apart.
 ///
-/// Gate semantics: when an event gate is configured, DisplayEvents carries
-/// the PRE-gate raw detector stream while MetricsEvents carries only the
-/// POST-gate stream that reached metrics/scoring.
+/// Gate semantics: when an event gate is configured, DisplayEvents and
+/// MetricsEvents carry the same POST-gate stream. The raw detector stream
+/// remains observable through Result.Events and Result.VetoedEvents.
 /// </summary>
 public sealed class DetectorMetricsEngine
 {
@@ -149,7 +149,6 @@ public sealed class DetectorMetricsEngine
             {
                 TgEvent ev = _result.Events[i];
                 double eventSample = EventSample(ev);
-                displayUpdates.Add(new DetectedEventUpdate(ev, eventSample, new WatchMetricsUpdate()));
 
                 bool matched = i >= pllMatch.Length || pllMatch[i] != 0;
                 var candidate = new BeatCandidate(
@@ -175,7 +174,9 @@ public sealed class DetectorMetricsEngine
                         released.EventSample, released.Candidate.Synced, released.Candidate.DetectedBph),
                     _ => new WatchMetricsUpdate(),
                 };
-                metricsUpdates.Add(new DetectedEventUpdate(released.Event, released.EventSample, metricsUpdate));
+                var update = new DetectedEventUpdate(released.Event, released.EventSample, metricsUpdate);
+                displayUpdates.Add(update);
+                metricsUpdates.Add(update);
             }
             if (_result.SyncLostEvent || _result.DetectorResetEvent)
             {

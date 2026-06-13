@@ -9,8 +9,8 @@ namespace TimeGrapher.Core.Tests;
 /// <summary>
 /// Contract tests for the engine-level event-gate host using a scriptable
 /// gate double: inert pass-through equals the ungated engine, vetoes remove
-/// events from the metrics stream (but never from the raw snapshot and never
-/// from the PLL), a vetoed A pair-vetoes its C, windowed gates receive
+/// events from the metrics/display streams (but never from the raw snapshot
+/// and never from the PLL), a vetoed A pair-vetoes its C, windowed gates receive
 /// correctly aligned envelope windows via delayed release, Flush
 /// force-releases, and sync loss resets the gate.
 /// </summary>
@@ -136,11 +136,12 @@ public sealed class BeatEventGateTests
 
         Assert.DoesNotContain(result.MetricsEvents, e => e.Type == TgEventType.A);
         Assert.DoesNotContain(result.MetricsEvents, e => e.Type == TgEventType.C);
+        Assert.DoesNotContain(result.DisplayEvents, e => e.Type == TgEventType.A);
+        Assert.DoesNotContain(result.DisplayEvents, e => e.Type == TgEventType.C);
+        Assert.Equal(result.MetricsEvents, result.DisplayEvents);
         Assert.True(result.FinalSnapshot.VetoedEvents > 0);
 
-        // The display and raw snapshot streams still carry everything.
-        Assert.Contains(result.DisplayEvents, e => e.Type == TgEventType.A);
-        Assert.Contains(result.DisplayEvents, e => e.Type == TgEventType.C);
+        // The raw snapshot stream still carries everything for diagnostics.
         Assert.Contains(result.SnapshotEvents, e => e.Type == TgEventType.A);
         Assert.Contains(result.SnapshotEvents, e => e.Type == TgEventType.C);
 
@@ -190,6 +191,51 @@ public sealed class BeatEventGateTests
             Assert.Equal(preSamples + postSamples + 1, length);
             Assert.Equal(preSamples, offset);
         }
+    }
+
+    [Fact]
+    public void WindowedGate_DisplayDeliveryLagStaysBoundedByTheWindowAndBlock()
+    {
+        const int blockSize = 4096;
+        const double postMs = 600.0;
+        var gate = new ScriptedGate { PreMs = 20.0, PostMs = postMs };
+        var engine = NewEngine(gate);
+        var synth = new WatchSynthStream(CleanStream());
+        var block = new float[blockSize];
+        int postSamples = (int)(postMs * 1e-3 * 48000);
+        double maxAllowedLag = postSamples + blockSize;
+        bool sawDisplayEvent = false;
+
+        void AssertDisplayLag(DetectorMetricsBlockUpdate update)
+        {
+            if (update.Result.ProcessedPcmLen == 0)
+            {
+                return;
+            }
+
+            double publishedThroughExclusive =
+                (double)update.Result.ProcessedPcmStartSample + update.Result.ProcessedPcmLen;
+            foreach (DetectedEventUpdate ev in update.DisplayEvents)
+            {
+                sawDisplayEvent = true;
+                double lag = publishedThroughExclusive - ev.EventSample;
+                Assert.True(lag <= maxAllowedLag,
+                    $"display lag {lag:F0} samples exceeds {maxAllowedLag:F0}");
+            }
+        }
+
+        int remaining = 48000 * 8;
+        while (remaining > 0)
+        {
+            int slice = Math.Min(block.Length, remaining);
+            synth.Generate(block.AsSpan(0, slice));
+            DetectorMetricsBlockUpdate update = engine.Process(block.AsSpan(0, slice));
+            AssertDisplayLag(update);
+            remaining -= slice;
+        }
+
+        AssertDisplayLag(engine.Flush());
+        Assert.True(sawDisplayEvent);
     }
 
     [Fact]

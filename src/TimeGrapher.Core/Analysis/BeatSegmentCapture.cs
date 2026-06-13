@@ -10,12 +10,13 @@ namespace TimeGrapher.Core.Analysis;
 /// immutable <see cref="BeatSegmentsSnapshot"/> (Beat-Noise Scope; shared
 /// infrastructure for any beat-aligned waveform view).
 ///
-/// A fixed-size rolling envelope ring (~<see cref="EnvelopeRingSeconds"/> of
-/// ProcessedPcm, sized from the sample rate at construction) lets a window span
-/// detector block boundaries: a window opens on its A event and is filled from
-/// the ring only once the envelope has advanced past the window end. Windows
-/// overlap (beats are shorter than the window), so several can be pending at
-/// once.
+/// A fixed-size rolling envelope ring, sized from the sample rate and the
+/// configured event-gate post-window at construction, lets a window span
+/// detector block boundaries and the bounded post-gate display latency of a
+/// windowed event gate: a window opens on its accepted A event and is filled
+/// from the ring only once the envelope has advanced past the window end.
+/// Windows overlap (beats are shorter than the window), so several can be
+/// pending at once.
 ///
 /// Segment buffers rotate through a fixed pool of <see cref="SegmentPoolCount"/>
 /// float[<see cref="SegmentPoints"/>] arrays instead of allocating per beat
@@ -60,7 +61,7 @@ public sealed class BeatSegmentCapture
     /// </summary>
     public const int SegmentPoolCount = 28;
 
-    private const double EnvelopeRingSeconds = 0.6;
+    private const double BaseEnvelopeRingSeconds = 0.6;
 
     // Bounded backlog of open (not yet filled) windows. Windows complete after
     // WindowMs, so at most ceil(WindowMs / beat period) + 1 are open at once
@@ -132,16 +133,28 @@ public sealed class BeatSegmentCapture
     private ulong _version;
     private BeatSegmentsSnapshot? _snapshot;
 
-    public BeatSegmentCapture(int sampleRate, double liftAngleDeg)
+    public BeatSegmentCapture(
+        int sampleRate,
+        double liftAngleDeg,
+        double maxDisplayDelayMs = 0.0,
+        int deliveryBlockSamples = 4096)
     {
         _sampleRate = sampleRate;
         _liftAngleDeg = liftAngleDeg;
-        _envelopeRing = new float[Math.Max(1, (int)(EnvelopeRingSeconds * sampleRate))];
+        _envelopeRing = new float[EnvelopeRingLength(sampleRate, maxDisplayDelayMs, deliveryBlockSamples)];
         _segmentPool = new float[SegmentPoolCount][];
         for (int i = 0; i < SegmentPoolCount; i++)
         {
             _segmentPool[i] = new float[SegmentPoints];
         }
+    }
+
+    private static int EnvelopeRingLength(int sampleRate, double maxDisplayDelayMs, int deliveryBlockSamples)
+    {
+        int baseSamples = (int)Math.Ceiling(BaseEnvelopeRingSeconds * sampleRate);
+        int delayedStartAgeSamples = (int)Math.Ceiling((maxDisplayDelayMs + PreEventMs) / 1000.0 * sampleRate) +
+                                     deliveryBlockSamples + 1;
+        return Math.Max(1, Math.Max(baseSamples, delayedStartAgeSamples));
     }
 
     /// <summary>

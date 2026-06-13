@@ -101,7 +101,11 @@ public sealed class AnalysisWorker : IDisposable
             config.SoundImageHeight,
             config.SoundImageBackgroundColor);
         _spectrogramProjector = new SpectrogramFrameProjector(config.SampleRate);
-        _beatSegmentCapture = new BeatSegmentCapture(config.SampleRate, config.LiftAngle);
+        _beatSegmentCapture = new BeatSegmentCapture(
+            config.SampleRate,
+            config.LiftAngle,
+            config.EventGate?.WindowPostMs ?? 0.0,
+            (int)DetectorNumberOfSamples);
         _sweepProjector = new SweepFrameProjector(config.SampleRate);
         _multiFilterProjector = new MultiFilterFrameProjector(config.SampleRate);
     }

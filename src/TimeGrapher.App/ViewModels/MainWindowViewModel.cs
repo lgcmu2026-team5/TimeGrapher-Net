@@ -244,8 +244,8 @@ internal sealed class MainWindowViewModel : INotifyPropertyChanged
     /// <summary>
     /// PLL event veto (drops phase-mismatched events before metrics).
     /// Adaptive floor and regime guard are always on; this opt-in adds the
-    /// veto, which boosts precision on weak/impulsive signals but can cost
-    /// recall under extreme sustained noise.
+    /// veto, which boosts precision on impulse-contaminated signals while
+    /// accepting a small recall cost.
     /// </summary>
     public bool PllEventVeto
     {

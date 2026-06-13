@@ -9,13 +9,13 @@ public sealed record BeatEventGateConfig(IBeatEventGate Gate);
 /// <summary>
 /// Hosts an <see cref="IBeatEventGate"/> at the metrics choke point of
 /// DetectorMetricsEngine. Zero-window gates decide immediately and add no
-/// latency or copying. Window-requesting gates get a 0.5 s engine-owned ring
-/// of the delayed envelope (ProcessedPcm) with FIFO delayed release: an
+/// latency or copying. Window-requesting gates get an engine-owned ring sized
+/// from the requested delayed-envelope window (ProcessedPcm) with FIFO delayed release: an
 /// event is decided once the ring covers its post-window, structurally
 /// guaranteeing window availability (the detector's internal 50 ms EnvRing
 /// cannot make that guarantee against 4096-sample blocks). Event timestamps
-/// are never altered; release latency only defers metric/display delivery
-/// by at most one or two blocks.
+/// are never altered; release latency defers metric/display delivery by the
+/// requested post-window plus at most one analysis block.
 ///
 /// A vetoed A also vetoes the immediately following C (one-shot pair veto)
 /// so an orphaned C cannot pair into a bogus amplitude reading.

@@ -3,8 +3,8 @@
 // impulse storms, gain steps) straight into the shared detector/metrics engine
 // (no WAV round-trip; the RIFF parsing path stays covered by the legacy
 // fixtures) and scores the detected A events against the FillF32 ground-truth
-// side channel. Gated rows assert current detector quality; rows still under
-// investigation report INFO-only quality numbers.
+// side channel. Gated rows assert current detector quality; optional arms that
+// are still under investigation report INFO-only quality numbers.
 
 using System.Globalization;
 using TimeGrapher.Core.Analysis;
@@ -31,6 +31,8 @@ internal sealed record AdverseGates(
     double MinRecall = double.NaN,
     double MaxRecall = double.NaN,
     double MinPrecision = double.NaN,
+    double MaxAbsMedianOffsetMs = double.NaN,
+    double MaxRmsAfterOffsetMs = double.NaN,
     int MinResets = -1,
     int MaxResets = -1,
     bool InfoOnly = false);
@@ -58,28 +60,30 @@ internal static class AdverseScenarios
 
     /// <summary>
     /// Scenario table. Gate values are calibrated against the fixed-seed
-    /// streams (see the commit body for the measured numbers); rows whose
-    /// behavior sits on a knife edge stay INFO-only.
+    /// streams (see the commit body for the measured numbers).
     /// </summary>
     internal static readonly AdverseScenario[] Rows =
     {
         // Weak signal (W-1/W-2 territory).
         new("weak-1", Bph: 21600, SampleRate: 48000, Seconds: 14,
             PcmPeak: 0.06, NoisePeak: 0.008, Realistic: true,
-            Default: new AdverseGates(MustSync: true)),
-        // Precision rises with the PLL gate but on single-digit matched
-        // counts, too fragile to gate: INFO.
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.90, MinPrecision: 0.90,
+                MaxAbsMedianOffsetMs: 1.0, MaxRmsAfterOffsetMs: 2.0)),
         new("weak-2", Bph: 18000, SampleRate: 48000, Seconds: 16,
             PcmPeak: 0.035, NoisePeak: 0.010, Realistic: false,
-            Default: new AdverseGates(InfoOnly: true)),
-        // Sustained broadband noise (W-7). The PLL phase can be dragged by
-        // noise, so the optional PLL gate is measured separately.
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.90, MinPrecision: 0.90,
+                MaxAbsMedianOffsetMs: 1.0, MaxRmsAfterOffsetMs: 2.0)),
+        // Sustained broadband noise (W-7). The default detector must keep
+        // usable event-level timing; the optional PLL veto arm is measured
+        // separately because PLL phase can itself be dragged by noise.
         new("noisy-1", Bph: 21600, SampleRate: 48000, Seconds: 14,
             PcmPeak: 0.25, NoisePeak: 0.08, Realistic: true,
-            Default: new AdverseGates(InfoOnly: true)),
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.70, MinPrecision: 0.70,
+                MaxAbsMedianOffsetMs: 1.0, MaxRmsAfterOffsetMs: 2.0)),
         new("noisy-2", Bph: 28800, SampleRate: 48000, Seconds: 14,
             PcmPeak: 0.20, NoisePeak: 0.12, Realistic: false,
-            Default: new AdverseGates(InfoOnly: true)),
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.90, MinPrecision: 0.90,
+                MaxAbsMedianOffsetMs: 1.0, MaxRmsAfterOffsetMs: 2.0)),
         // Impulse storms (W-3 regime-reset DoS, W-5/W-8 contamination).
         // Mirrored in-process by tests/TimeGrapher.Core.Tests/
         // DetectorStressScenarioTests.cs - keep parameters and gates in sync
@@ -87,13 +91,13 @@ internal static class AdverseScenarios
         new("impulse-dos", Bph: 21600, SampleRate: 48000, Seconds: 16,
             PcmPeak: 0.03, NoisePeak: 0.004, Realistic: false,
             ImpulseRate: 1.0, ImpulseAmp: 0.95,
-            Default: new AdverseGates(MustSync: true, MaxResets: 1, MinRecall: 0.15)),
+            Default: new AdverseGates(MustSync: true, MaxResets: 1, MinRecall: 0.90, MinPrecision: 0.90)),
         // The optional PLL gate can raise precision here; the default detector
         // should still retain the watch.
         new("impulse-storm", Bph: 28800, SampleRate: 48000, Seconds: 16,
             PcmPeak: 0.25, NoisePeak: 0.02, Realistic: false,
             ImpulseRate: 3.0, ImpulseAmp: 0.6,
-            Default: new AdverseGates(MustSync: true, MinRecall: 0.80, MinPrecision: 0.80)),
+            Default: new AdverseGates(MustSync: true, MinRecall: 0.90, MinPrecision: 0.90)),
         // Loud-to-quiet gain step (W-4(b) latch-up).
         // Mirrored in-process by tests/TimeGrapher.Core.Tests/
         // DetectorStressScenarioTests.cs - keep parameters and gates in sync
@@ -274,6 +278,14 @@ internal static class AdverseScenarios
         if (!double.IsNaN(gates.MinPrecision))
         {
             ok &= score.Precision >= gates.MinPrecision;
+        }
+        if (!double.IsNaN(gates.MaxAbsMedianOffsetMs))
+        {
+            ok &= Math.Abs(score.MedianOffsetMs) <= gates.MaxAbsMedianOffsetMs;
+        }
+        if (!double.IsNaN(gates.MaxRmsAfterOffsetMs))
+        {
+            ok &= score.RmsAfterOffsetMs <= gates.MaxRmsAfterOffsetMs;
         }
         if (gates.MinResets >= 0)
         {

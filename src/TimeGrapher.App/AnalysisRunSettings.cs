@@ -30,8 +30,8 @@ internal sealed record AnalysisRunSettings(
             AutoBph = AutoBph,
             ManualBph = ManualBph,
             HpfCutoffHz = HpfCutoffHz,
-            // The PLL event veto stays opt-in because it regresses recall
-            // under extreme sustained noise (noisy-1 row).
+            // The PLL event veto stays opt-in because it trades a small recall
+            // cost for precision on impulse-contaminated streams.
             EventGate = PllEventVeto ? new PllMatchGate() : null,
             SoundImageWidth = SoundImageWidth,
             SoundImageHeight = SoundImageHeight,

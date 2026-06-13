@@ -16,7 +16,8 @@ public sealed class BeatSegmentCaptureTests
     private const double SamplesPerMs = SampleRate / 1000.0;
     private const int WindowSamples = (int)(BeatSegmentCapture.WindowMs / 1000.0 * SampleRate);
 
-    private static BeatSegmentCapture NewCapture() => new(SampleRate, liftAngleDeg: 52.0);
+    private static BeatSegmentCapture NewCapture(double maxDisplayDelayMs = 0.0) =>
+        new(SampleRate, liftAngleDeg: 52.0, maxDisplayDelayMs: maxDisplayDelayMs);
 
     private static DetectorResultSnapshot Result(float[] pcm, ulong startSample) =>
         new(TgSyncStatus.Synced, 28800, 0.125, Array.Empty<TgEvent>(), pcm, pcm.Length, startSample,
@@ -156,6 +157,61 @@ public sealed class BeatSegmentCaptureTests
         ReadOnlySpan<float> samples = segment.Samples.Span;
         Assert.Equal(0.9f, samples[(int)(BeatSegmentCapture.PreEventMs / BeatSegmentCapture.MsPerPoint)]);
         Assert.Equal(0.8f, samples[(int)((BeatSegmentCapture.PreEventMs + 200.0) / BeatSegmentCapture.MsPerPoint)]);
+    }
+
+    [Fact]
+    public void Capture_DelayedPostGateEventStillReadsOriginalEnvelope()
+    {
+        const double postMs = 600.0;
+        var capture = NewCapture(maxDisplayDelayMs: postMs);
+        const int aSample = 24000;
+        const int blockSize = 4096;
+        int delayedEventBlockStart = aSample + (int)(postMs / 1000.0 * SampleRate);
+
+        Feed(capture, 0, delayedEventBlockStart,
+            spikes: new[] { (aSample, 0.9f) });
+
+        // Simulates a windowed event gate that releases an accepted A only
+        // after its 600 ms post-window plus block overshoot is available.
+        Feed(capture, (ulong)delayedEventBlockStart, blockSize,
+            spikes: null,
+            AEvent(aSample, peak: 0.9f, isTic: true));
+
+        BeatSegment segment = Assert.Single(capture.CurrentSnapshot()!.Segments);
+        ReadOnlySpan<float> samples = segment.Samples.Span;
+        Assert.Equal(0.9f, samples[(int)(segment.AOffsetMs / BeatSegmentCapture.MsPerPoint)]);
+    }
+
+    [Fact]
+    public void Capture_DelayedSubSampleEventKeepsPreRollBoundary()
+    {
+        const double postMs = 600.0;
+        var capture = NewCapture(maxDisplayDelayMs: postMs);
+        const int aSampleIndex = 24000;
+        const double eventSample = aSampleIndex - 0.5;
+        const int blockSize = 4096;
+        int delayedEventBlockStart = aSampleIndex + (int)(postMs / 1000.0 * SampleRate);
+        int segmentStart = (int)(eventSample - BeatSegmentCapture.PreEventMs * SamplesPerMs);
+        var aEvent = new TgEvent
+        {
+            Type = TgEventType.A,
+            SampleIndex = aSampleIndex,
+            SubSampleOffset = -0.5,
+            PeakValue = 0.9f,
+        };
+        var update = new WatchMetricsUpdate();
+        update.SetBeatTimingSample(new BeatTimingSample(
+            1, eventSample / SampleRate, true, 0.0, true, 0.0, true, 0.0, 28800));
+
+        Feed(capture, 0, delayedEventBlockStart,
+            spikes: new[] { (segmentStart, 0.8f) });
+
+        Feed(capture, (ulong)delayedEventBlockStart, blockSize,
+            spikes: null,
+            new DetectedEventUpdate(aEvent, eventSample, update));
+
+        BeatSegment segment = Assert.Single(capture.CurrentSnapshot()!.Segments);
+        Assert.Equal(0.8f, segment.Samples.Span[0]);
     }
 
     [Fact]

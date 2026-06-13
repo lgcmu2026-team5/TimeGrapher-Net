@@ -26,7 +26,8 @@ public interface IBeatEventGate
     /// both are zero the gate is called immediately with an empty window and
     /// adds zero latency; otherwise the engine buffers the delayed envelope
     /// and calls <see cref="Accept"/> once the post-window is available
-    /// (one to two blocks later; event timestamps are unaffected).
+    /// (post-window plus at most one analysis block later; event timestamps
+    /// are unaffected).
     /// </summary>
     double WindowPreMs { get; }
     double WindowPostMs { get; }

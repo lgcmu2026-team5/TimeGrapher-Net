@@ -344,6 +344,11 @@ internal sealed class TgDetectorCore
         PhaseGuideBeatPeriod = beatPeriod;
         PhaseGuideAcOffset = acOffset < 0.0 ? -acOffset : acOffset;
         PhaseGuideWindowS = windowS;
+        /* Post-lock, longer beat periods leave more idle time for broadband
+         * noise to cross the onset threshold before the real A packet. Harden
+         * the guided-onset threshold for those slower beats, while keeping
+         * faster 28800+ BPH packets sensitive enough to avoid skipped onsets. */
+        PhaseGuideOnsetScale = beatPeriod >= 0.15 ? 3.0 : 1.5;
     }
 
     public void ClearPhaseGuide()
@@ -745,8 +750,12 @@ internal sealed class TgDetectorCore
     // tg_detector_get_thresholds
     public void GetThresholds(out double onsetThr, out double minPeakThr,
                               out double effNoise, out double refPeak)
+        => GetThresholds(phaseGuided: false, out onsetThr, out minPeakThr, out effNoise, out refPeak);
+
+    public void GetThresholds(bool phaseGuided, out double onsetThr, out double minPeakThr,
+                              out double effNoise, out double refPeak)
     {
-        ComputeThresholds(TotalSamples, out effNoise, out refPeak, out _, out onsetThr, out minPeakThr);
+        ComputeThresholds(TotalSamples, phaseGuided, out effNoise, out refPeak, out _, out onsetThr, out minPeakThr);
     }
 
     // clamp_fraction
@@ -827,6 +836,7 @@ internal sealed class TgDetectorCore
             }
 
             /* Thresholds anchored to median of recent peak heights. */
+            bool phaseGuideActive = PhaseGuideEnabled != 0;
             bool phaseGuidedSample = PhaseGuideMatchesA(absIdx) != 0;
             ComputeThresholds(absIdx, phaseGuidedSample,
                               out _, out _, out double span, out double onsetThr, out double _);
@@ -845,9 +855,15 @@ internal sealed class TgDetectorCore
 
             if (InBurst == 0)
             {
-                /* Silence -> burst transition. Two gates must BOTH pass. */
+                /* Silence -> burst transition. Before lock, use the raw
+                 * threshold crossing so acquisition is unchanged. After lock,
+                 * the PLL A-phase guide must also admit the onset; otherwise a
+                 * noise crossing can consume the whole beat before the true A. */
                 ulong minSilenceSamples = MinSilenceSamples;
-                if (e > onsetThr && PrevSample <= onsetThr &&
+                bool crossedOnset = e > onsetThr && PrevSample <= onsetThr;
+                bool guidedOnset = phaseGuideActive && phaseGuidedSample && e > onsetThr;
+                bool onsetAllowed = phaseGuideActive ? guidedOnset : crossedOnset;
+                if (onsetAllowed &&
                     SilenceSamples >= minSilenceSamples &&
                     SamplesSinceLastA >= MinAIntervalSamples)
                 {
@@ -858,16 +874,15 @@ internal sealed class TgDetectorCore
                     /* Sub-sample crossing time: linear interpolation. */
                     double frac = 0.0;
                     double denom = e - PrevSample;
-                    if (denom > 1e-20)
+                    if (crossedOnset && denom > 1e-20)
                     {
                         frac = (onsetThr - PrevSample) / denom;
                         if (frac < 0.0) frac = 0.0;
                         if (frac > 1.0) frac = 1.0;
                     }
-                    /* Crossing is at time (abs_idx - 1 + frac). */
-                    ulong idx = absIdx - 1;
-                    double sub = frac;
-                    if (sub > 0.5) { idx += 1; sub -= 1.0; }
+                    ulong idx = crossedOnset ? absIdx - 1 : absIdx;
+                    double sub = crossedOnset ? frac : 0.0;
+                    if (crossedOnset && sub > 0.5) { idx += 1; sub -= 1.0; }
                     BurstStartIdx = idx;
                     BurstStartOffset = sub;
                     BurstStartTime = ((double)idx + sub) / Fs;

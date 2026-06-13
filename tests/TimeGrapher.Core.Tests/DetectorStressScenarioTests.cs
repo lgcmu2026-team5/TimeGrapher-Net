@@ -6,9 +6,11 @@ using Xunit;
 namespace TimeGrapher.Core.Tests;
 
 /// <summary>
-/// In-process mirrors of the verifier's two strongest adverse rows
+/// In-process mirrors of the verifier's strongest adverse rows
 /// (harness-test alignment convention), so `dotnet test` alone proves the
 /// default detector recovery without running the Verify executable:
+///  - weak-2 / noisy-1 / noisy-2: weak and broadband-noisy streams keep
+///    event timing close enough for the verifier's A-event scorer after lock.
 ///  - impulse-dos: full-scale impulses once a second over a quiet watch.
 ///    The detector rides it out without reset storms.
 ///  - quiet-step: a 0.13x gain step after 6 s. The detector decays the
@@ -29,9 +31,12 @@ public sealed class DetectorStressScenarioTests
         double impulseRate = 0.0, double impulseAmp = 0.0,
         double gainStepAtS = 0.0, double gainStepFactor = 1.0,
         int silenceLeadInSamples = 0,
-        double evalStartS = 2.0)
+        double evalStartS = 2.0,
+        bool realistic = false)
     {
-        WatchSynthStreamConfig cfg = WatchSynthStreamConfig.Clean();
+        WatchSynthStreamConfig cfg = realistic
+            ? WatchSynthStreamConfig.Realistic()
+            : WatchSynthStreamConfig.Clean();
         cfg.SampleRateHz = 48000;
         cfg.Bph = bph;
         cfg.PcmPeakAmplitude = pcmPeak;
@@ -113,6 +118,53 @@ public sealed class DetectorStressScenarioTests
                 detectedATimes.Add(ev.EventSample / 48000);
             }
         }
+    }
+
+    private static void AssertTimingWithinGate(DetectionScorer.Score score)
+    {
+        Assert.True(Math.Abs(score.MedianOffsetMs) <= 1.0,
+            $"a_bias_ms {score.MedianOffsetMs:F3}");
+        Assert.True(score.RmsAfterOffsetMs <= 2.0,
+            $"a_rms_ms {score.RmsAfterOffsetMs:F3}");
+    }
+
+    [Fact]
+    public void WeakSignal_DefaultDetectorKeepsTimedEvents()
+    {
+        StressResult result = Run(pcmPeak: 0.035, noisePeak: 0.010,
+            bph: 18000, seconds: 16);
+
+        Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
+        Assert.Equal(18000, result.DetectedBph);
+        Assert.True(result.Score.Recall >= 0.90, $"recall {result.Score.Recall:F3}");
+        Assert.True(result.Score.Precision >= 0.90, $"precision {result.Score.Precision:F3}");
+        AssertTimingWithinGate(result.Score);
+    }
+
+    [Fact]
+    public void BroadbandNoise_DefaultDetectorKeepsUsableTimedEvents()
+    {
+        StressResult result = Run(pcmPeak: 0.25, noisePeak: 0.08,
+            bph: 21600, seconds: 14, realistic: true);
+
+        Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
+        Assert.Equal(21600, result.DetectedBph);
+        Assert.True(result.Score.Recall >= 0.70, $"recall {result.Score.Recall:F3}");
+        Assert.True(result.Score.Precision >= 0.70, $"precision {result.Score.Precision:F3}");
+        AssertTimingWithinGate(result.Score);
+    }
+
+    [Fact]
+    public void HeavyNoise_DefaultDetectorKeepsTimedEvents()
+    {
+        StressResult result = Run(pcmPeak: 0.20, noisePeak: 0.12,
+            bph: 28800, seconds: 14);
+
+        Assert.Equal(TgSyncStatus.Synced, result.FinalSync);
+        Assert.Equal(28800, result.DetectedBph);
+        Assert.True(result.Score.Recall >= 0.90, $"recall {result.Score.Recall:F3}");
+        Assert.True(result.Score.Precision >= 0.90, $"precision {result.Score.Precision:F3}");
+        AssertTimingWithinGate(result.Score);
     }
 
     [Fact]

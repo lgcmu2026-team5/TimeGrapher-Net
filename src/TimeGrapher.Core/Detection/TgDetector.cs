@@ -282,7 +282,7 @@ public sealed class TgDetector
             if (_sync.Synced != 0 && _currentBeatPeriod > 0.0)
             {
                 double tol = _currentBeatPeriod * _cfg.SyncTolerancePct * 0.01;
-                double guideWindow = 1.5 * tol;
+                double guideWindow = 2.5 * tol;
                 double minWindow = 0.006;
                 if (guideWindow < minWindow) guideWindow = minWindow;
                 double maxWindow = 0.12 * _currentBeatPeriod;
@@ -548,7 +548,12 @@ public sealed class TgDetector
 
         /* Detector state for diagnostics */
         {
-            _det.GetThresholds(out double onsetThr, out double minPeakThr,
+            /* The UI threshold is a scalar diagnostic; the post-lock phase
+             * veto is represented by accepted event markers. When the phase
+             * guide is active, expose the guided amplitude threshold. */
+            bool phaseGuidedDiagnostic = result.SyncStatus == TgSyncStatus.Synced &&
+                                          _det.PhaseGuideEnabled != 0;
+            _det.GetThresholds(phaseGuidedDiagnostic, out double onsetThr, out double minPeakThr,
                                out double effNoise, out double refPeak);
             result.OnsetThreshold = (float)onsetThr;
             result.MinPeakThreshold = (float)minPeakThr;

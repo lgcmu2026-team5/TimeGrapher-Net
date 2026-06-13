@@ -11,8 +11,9 @@ namespace TimeGrapher.Core.Tests;
 /// impulse-storm stream (28800 BPH, 0.25 pcm, 0.02 noise, 3 impulses/s at
 /// 0.6 amplitude), plus the ORACLE upper bound that proves the seam leaves
 /// measurable headroom for a future shape-based (TinyML) gate. Measured
-/// values this pins: base precision 0.911 / pll 0.981 / oracle 1.000;
-/// recall 0.911 / 0.902 / 0.911; identical first-sync block in all arms.
+/// values this pins after post-lock onset gating: base precision 0.964 /
+/// pll 1.000 / oracle 1.000; recall 0.964 / 0.955 / 0.964; identical
+/// first-sync block in all arms.
 /// </summary>
 public sealed class PllMatchGateTests
 {
@@ -139,7 +140,7 @@ public sealed class PllMatchGateTests
         ArmResult pllArm = RunArm(new PllMatchGate(), truth);
 
         // Precision: spurious impulse events are vetoed before metrics.
-        Assert.True(pllArm.Score.Precision >= baseArm.Score.Precision + 0.04,
+        Assert.True(pllArm.Score.Precision >= baseArm.Score.Precision + 0.03,
             $"pll precision {pllArm.Score.Precision:F3} vs base {baseArm.Score.Precision:F3}");
         Assert.True(pllArm.Score.Precision >= 0.95, $"pll precision {pllArm.Score.Precision:F3}");
 
