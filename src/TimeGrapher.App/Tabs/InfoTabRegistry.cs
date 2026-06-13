@@ -572,19 +572,18 @@ internal sealed class InfoTabRegistry
             Opacity = 1.0,
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(16, 0, 16, 6),
-            TextWrapping = TextWrapping.Wrap,
+            TextWrapping = TextWrapping.NoWrap,
         };
         Run Swatch(string text, Color color) => new(text) { Foreground = new SolidColorBrush(color), FontWeight = FontWeight.Bold };
-        var currentSwatch = new Run("Current dashed") { FontWeight = FontWeight.Bold };
-        currentSwatch.Bind(TextElement.ForegroundProperty, currentSwatch.GetResourceObservable("TextPrimaryBrush"));
+        var currentSwatch = Swatch("Black Dashed", Colors.Black);
         legend.Inlines = new InlineCollection
         {
             Swatch("Amber band", Color.FromRgb(0x9A, 0x6A, 0x00)),
-            new Run(" = acceptable band     "),
+            new Run(" = acceptable band   "),
             Swatch("Blue solid", Color.FromRgb(0x2D, 0x7D, 0xD2)),
-            new Run(" = measured min/max     "),
+            new Run(" = measured min/max   "),
             Swatch("Red solid", Color.FromRgb(0xC0, 0x39, 0x2B)),
-            new Run(" = average     "),
+            new Run(" = average   "),
             currentSwatch,
             new Run(" = current"),
         };

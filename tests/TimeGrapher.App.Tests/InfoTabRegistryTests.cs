@@ -294,7 +294,13 @@ public sealed class InfoTabRegistryTests
         Assert.DoesNotContain("Pale green band + blue edge", legendText);
         Assert.Contains("Blue solid", legendText);
         Assert.Contains("Red solid", legendText);
-        Assert.Contains("Current dashed", legendText);
+        Assert.DoesNotContain("Current dashed", legendText);
+        Assert.Contains("Black Dashed", legendText);
+        Assert.Equal(TextWrapping.NoWrap, legend.TextWrapping);
+
+        Run currentSwatch = Assert.Single(legend.Inlines!.OfType<Run>(), run => run.Text == "Black Dashed");
+        var currentBrush = Assert.IsType<SolidColorBrush>(currentSwatch.Foreground);
+        Assert.Equal(Colors.Black, currentBrush.Color);
     }
 
     private static Grid CreateVarioContent()
